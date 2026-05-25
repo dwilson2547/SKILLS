@@ -1,10 +1,13 @@
 ---
+name: handoff-document
+description: 'Write a handoff document when context is running low and work is incomplete, or when explicitly requested. Never include code — pass file paths only.'
+---
 
-## Handoff Document
+# Handoff Document
 
-Produce this when context is running low before the work is complete, or when explicitly requested.
+Write the handoff to `docs/handoff-<feature-name>.md` in the project root.
 
-**Format — plain prose and lists, no code blocks.**
+## Format
 
 ```
 # Handoff: <Feature Name>
@@ -13,24 +16,24 @@ Produce this when context is running low before the work is complete, or when ex
 - Bullet list of steps finished in this session.
 
 ## What Remains
-- Ordered list of remaining implementation steps, specific enough that
-  a developer can pick up without needing to re-read this session's chat.
+- Ordered list of remaining steps, specific enough to resume without re-reading the chat.
 
 ## Design Decisions Made
-- List each significant decision and the rationale behind it.
+- Each significant decision and the rationale behind it.
 
 ## Open Design Decisions
-- Any decisions that still need to be made before a remaining step can be implemented.
-- Include the options considered so far and any relevant tradeoffs.
+- Unresolved decisions, options considered, and relevant tradeoffs.
+- Flag these clearly — an unresolved decision is more dangerous than incomplete code.
 
 ## Files Modified
 - List of files created or changed, with a one-line description of what changed.
 
 ## Suggested Starting Point
-- Where the next session should begin (file, function, or step).
+- Where the next session should begin: file path, function name, or step.
 ```
 
-**Rules for the handoff:**
-- No code. The next agent will re-index the project and read the files directly.
-- Be specific enough that the next session requires no clarification to resume.
-- If there are open design decisions, flag them clearly — an unresolved decision is more dangerous than an incomplete implementation.
+## Rules
+
+- **No code.** The next agent reads the files directly. File paths only.
+- Be specific enough that the next session requires zero clarification to resume.
+- If open design decisions exist, list them first — they block everything downstream.
