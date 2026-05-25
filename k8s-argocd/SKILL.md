@@ -9,6 +9,23 @@ All cluster changes deploy via git. **Never `kubectl apply` for anything managed
 
 ---
 
+## Which Pattern to Use
+
+**Helm chart in its own repo** — multi-service systems that are deployed as a unit:
+- gyopart (api, ui, inventory-api, admin-api)
+- scrape-stack (webcache, imgcache, request-auth, browserless, etc.)
+- DanWiki, Photo-Dump, and similar future systems
+
+These have their own git repo, their own Helm chart, and a `main`/`dev` branch strategy for prod vs dev. ArgoCD app manifests live either in the system's repo or in cluster_config — check the existing pattern for each system.
+
+**cluster_config manifests** — everything else:
+- Core infrastructure: postgres, monitoring, DNS, ingress
+- Small standalone services where a dedicated helm repo would be overkill: homepage, ddclient, vpn, searxng
+
+If it's one or two services with no dev/prod split needed, cluster_config is the right home.
+
+---
+
 ## Two Deployment Patterns
 
 ### 1. Manifest-based — `cluster_config` repo
