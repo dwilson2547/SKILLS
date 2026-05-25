@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Todo Store</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f3f4f6;
+    --surface: #ffffff;
+    --sidebar-bg: #f8fafc;
+    --border: #e5e7eb;
+    --text: #111827;
+    --text-muted: #6b7280;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --danger: #dc2626;
+    --success: #15803d;
+    --open: #2563eb;
+    --progress: #7c3aed;
+    --blocked: #b45309;
+    --done: #15803d;
+    --urgent: #b91c1c;
+    --high: #c2410c;
+    --medium: #1d4ed8;
+    --low: #475569;
+  }
+
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    height: 100vh;
+  }
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .sidebar-header,
+  .main-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem;
+  }
+
+  .sidebar-header {
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+  }
+
+  .brand {
+    display: flex;
+    justify-content: space-between;
+    gap: .75rem;
+    align-items: center;
+  }
+
+  .brand h1 {
+    font-size: 1.2rem;
+  }
+
+  .brand span {
+    color: var(--text-muted);
+    font-size: .82rem;
+  }
+
+  .filters {
+    display: grid;
+    gap: .5rem;
+  }
+
+  .filter-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .5rem;
+  }
+
+  input[type="text"], textarea, select {
+    width: 100%;
+    padding: .6rem .75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+  }
+
+  textarea {
+    min-height: 120px;
+    resize: vertical;
+  }
+
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+
+  button {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    padding: .55rem .85rem;
+    cursor: pointer;
+  }
+
+  button:hover {
+    background: #eff6ff;
+  }
+
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  button.primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+
+  button.danger {
+    color: var(--danger);
+  }
+
+  button.success {
+    color: var(--success);
+  }
+
+  .todo-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: .75rem;
+  }
+
+  .todo-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: .9rem;
+    margin-bottom: .65rem;
+    cursor: pointer;
+  }
+
+  .todo-card.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+  }
+
+  .todo-card h3 {
+    font-size: .95rem;
+    margin-bottom: .35rem;
+  }
+
+  .todo-card p {
+    color: var(--text-muted);
+    font-size: .82rem;
+    line-height: 1.45;
+  }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin-top: .65rem;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: .2rem .55rem;
+    font-size: .72rem;
+    font-weight: 600;
+    background: #eef2ff;
+  }
+
+  .status-open { color: var(--open); background: rgba(37, 99, 235, .12); }
+  .status-in_progress { color: var(--progress); background: rgba(124, 58, 237, .12); }
+  .status-blocked { color: var(--blocked); background: rgba(180, 83, 9, .12); }
+  .status-done { color: var(--done); background: rgba(21, 128, 61, .12); }
+
+  .priority-urgent { color: var(--urgent); background: rgba(185, 28, 28, .12); }
+  .priority-high { color: var(--high); background: rgba(194, 65, 12, .12); }
+  .priority-medium { color: var(--medium); background: rgba(29, 78, 216, .12); }
+  .priority-low { color: var(--low); background: rgba(71, 85, 105, .12); }
+
+  .main {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .main-header {
+    display: flex;
+    justify-content: space-between;
+    gap: .75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+  }
+
+  .main-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+  }
+
+  .panel + .panel {
+    margin-top: 1rem;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .75rem;
+  }
+
+  .field {
+    display: grid;
+    gap: .4rem;
+    margin-bottom: .85rem;
+  }
+
+  .field label {
+    font-size: .84rem;
+    color: var(--text-muted);
+  }
+
+  .actions {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+  }
+
+  .detail-list {
+    display: grid;
+    gap: .5rem;
+  }
+
+  .detail-item {
+    font-size: .86rem;
+    color: var(--text-muted);
+  }
+
+  .empty {
+    color: var(--text-muted);
+    font-size: .9rem;
+    padding: 2rem 1rem;
+    text-align: center;
+  }
+
+  .error {
+    color: var(--danger);
+    font-size: .84rem;
+  }
+
+  .success-text {
+    color: var(--success);
+    font-size: .84rem;
+  }
+
+  @media (max-width: 960px) {
+    .app {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+      max-height: 40vh;
+    }
+
+    .grid,
+    .filter-row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+<body x-data="todoStore()" x-init="init()">
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand">
+        <div>
+          <h1>Todo Store</h1>
+          <span x-text="todos.length + ' todos loaded'"></span>
+        </div>
+        <button @click="loadTodos()">Refresh</button>
+      </div>
+
+      <div class="filters">
+        <input type="text" placeholder="Search title, description, tags…" x-model="filters.query" @input.debounce.250ms="loadTodos()">
+        <div class="filter-row">
+          <select x-model="filters.status" @change="loadTodos()">
+            <option value="all">All statuses</option>
+            <option value="open">Open</option>
+            <option value="in_progress">In progress</option>
+            <option value="blocked">Blocked</option>
+            <option value="done">Done</option>
+          </select>
+          <select x-model="filters.priority" @change="loadTodos()">
+            <option value="all">All priorities</option>
+            <option value="urgent">Urgent</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <input type="text" placeholder="Tags (comma-separated)" x-model="filters.tags" @input.debounce.250ms="loadTodos()">
+      </div>
+    </div>
+
+    <div class="todo-list">
+      <template x-if="loading">
+        <div class="empty">Loading todos…</div>
+      </template>
+
+      <template x-if="!loading && !todos.length">
+        <div class="empty">No todos match the current filters.</div>
+      </template>
+
+      <template x-for="todo in todos" :key="todo.id">
+        <div class="todo-card" :class="{ selected: selected && selected.id === todo.id }" @click="selectTodo(todo)">
+          <h3 x-text="todo.title"></h3>
+          <p x-text="todo.description || 'No description'"></p>
+          <div class="meta-row">
+            <span class="badge" :class="'status-' + todo.status" x-text="todo.status"></span>
+            <span class="badge" :class="'priority-' + todo.priority" x-text="todo.priority"></span>
+            <template x-for="tag in splitTags(todo.tags)" :key="tag">
+              <span class="badge" x-text="tag"></span>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="main-header">
+      <div>
+        <strong x-text="editing.id ? 'Editing todo #' + editing.id : 'New todo'"></strong>
+      </div>
+      <div class="header-actions">
+        <button class="primary" @click="newTodo()">New todo</button>
+        <button @click="exportTodos()">Export JSON</button>
+        <button @click="triggerImport('merge')">Import merge</button>
+        <button @click="triggerImport('replace')">Import replace</button>
+      </div>
+      <input type="file" accept="application/json" x-ref="importInput" style="display:none" @change="handleImport">
+    </div>
+
+    <div class="main-body">
+      <div class="panel">
+        <div class="field">
+          <label for="title">Title</label>
+          <input id="title" type="text" x-model="editing.title" placeholder="Investigate flaky yard sync">
+        </div>
+
+        <div class="field">
+          <label for="description">Description</label>
+          <textarea id="description" x-model="editing.description" placeholder="Short description, optionally pointing to notes or context-store"></textarea>
+        </div>
+
+        <div class="grid">
+          <div class="field">
+            <label for="tags">Tags</label>
+            <input id="tags" type="text" x-model="editing.tags" placeholder="bug,triage">
+          </div>
+          <div class="field">
+            <label for="priority">Priority</label>
+            <select id="priority" x-model="editing.priority">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="field">
+            <label for="status">Status</label>
+            <select id="status" x-model="editing.status">
+              <option value="open">Open</option>
+              <option value="in_progress">In progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+          <div class="field" x-show="editing.status === 'done'">
+            <label for="completion">Completion note</label>
+            <input id="completion" type="text" x-model="editing.completion_description" placeholder="Optional completion description">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="primary" @click="saveTodo()">Save</button>
+          <button class="success" x-show="editing.id && editing.status !== 'done'" @click="markDone()">Mark done</button>
+          <button x-show="editing.id && editing.status === 'done'" @click="reopenTodo()">Reopen</button>
+          <button class="danger" x-show="editing.id" @click="deleteTodo()">Delete</button>
+        </div>
+
+        <template x-if="error">
+          <p class="error" style="margin-top:.85rem" x-text="error"></p>
+        </template>
+        <template x-if="message">
+          <p class="success-text" style="margin-top:.85rem" x-text="message"></p>
+        </template>
+      </div>
+
+      <div class="panel" x-show="selected">
+        <h2 style="font-size:1rem; margin-bottom:.75rem">Selected todo details</h2>
+        <div class="detail-list" x-show="selected">
+          <div class="detail-item"><strong>ID:</strong> <span x-text="selected?.id"></span></div>
+          <div class="detail-item"><strong>Created:</strong> <span x-text="formatDate(selected?.created_at)"></span></div>
+          <div class="detail-item"><strong>Updated:</strong> <span x-text="formatDate(selected?.updated_at)"></span></div>
+          <div class="detail-item" x-show="selected?.completed_at"><strong>Completed:</strong> <span x-text="formatDate(selected?.completed_at)"></span></div>
+          <div class="detail-item" x-show="selected?.completion_description"><strong>Completion note:</strong> <span x-text="selected?.completion_description"></span></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const API = '/api';
+
+function blankTodo() {
+  return {
+    id: null,
+    title: '',
+    description: '',
+    tags: '',
+    priority: 'medium',
+    status: 'open',
+    completion_description: '',
+  };
+}
+
+function todoStore() {
+  return {
+    todos: [],
+    selected: null,
+    editing: blankTodo(),
+    loading: false,
+    error: '',
+    message: '',
+    importMode: 'merge',
+    filters: {
+      query: '',
+      status: 'all',
+      priority: 'all',
+      tags: '',
+    },
+
+    async init() {
+      await this.loadTodos();
+    },
+
+    splitTags(tags) {
+      return (tags || '').split(',').map(tag => tag.trim()).filter(Boolean);
+    },
+
+    formatDate(value) {
+      if (!value) return '—';
+      return new Date(value).toLocaleString();
+    },
+
+    clearMessages() {
+      this.error = '';
+      this.message = '';
+    },
+
+    async loadTodos() {
+      this.loading = true;
+      this.clearMessages();
+      try {
+        const params = new URLSearchParams();
+        if (this.filters.status) params.set('status', this.filters.status);
+        if (this.filters.priority) params.set('priority', this.filters.priority);
+        if (this.filters.tags.trim()) params.set('tags', this.filters.tags.trim());
+        if (this.filters.query.trim()) params.set('q', this.filters.query.trim());
+        const response = await fetch(`${API}/todos?${params.toString()}`);
+        if (!response.ok) throw new Error('Failed to load todos.');
+        this.todos = await response.json();
+
+        if (this.selected) {
+          const refreshed = this.todos.find(todo => todo.id === this.selected.id);
+          this.selected = refreshed || null;
+          if (refreshed && this.editing.id === refreshed.id) {
+            this.editing = { ...refreshed, completion_description: refreshed.completion_description || '' };
+          }
+        }
+      } catch (error) {
+        this.error = error.message;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    newTodo() {
+      this.selected = null;
+      this.editing = blankTodo();
+      this.clearMessages();
+    },
+
+    selectTodo(todo) {
+      this.selected = todo;
+      this.editing = { ...todo, completion_description: todo.completion_description || '' };
+      this.clearMessages();
+    },
+
+    payloadFromEditing() {
+      return {
+        title: this.editing.title,
+        description: this.editing.description,
+        tags: this.editing.tags,
+        priority: this.editing.priority,
+        status: this.editing.status,
+        completion_description: this.editing.status === 'done' ? this.editing.completion_description : null,
+      };
+    },
+
+    async saveTodo() {
+      this.clearMessages();
+      if (!this.editing.title.trim()) {
+        this.error = 'Title is required.';
+        return;
+      }
+
+      const payload = this.payloadFromEditing();
+      const method = this.editing.id ? 'PUT' : 'POST';
+      const path = this.editing.id ? `${API}/todos/${this.editing.id}` : `${API}/todos`;
+
+      try {
+        const response = await fetch(path, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error('Failed to save todo.');
+        const todo = await response.json();
+        this.selected = todo;
+        this.editing = { ...todo, completion_description: todo.completion_description || '' };
+        this.message = this.editing.id ? 'Todo saved.' : 'Todo created.';
+        await this.loadTodos();
+      } catch (error) {
+        this.error = error.message;
+      }
+    },
+
+    async markDone() {
+      if (!this.editing.id) return;
+      const note = window.prompt('Optional completion description:', this.editing.completion_description || '');
+      if (note === null) return;
+
+      this.clearMessages();
+      try {
+        const response = await fetch(`${API}/todos/${this.editing.id}/complete`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ completion_description: note }),
+        });
+        if (!response.ok) throw new Error('Failed to complete todo.');
+        const todo = await response.json();
+        this.selected = todo;
+        this.editing = { ...todo, completion_description: todo.completion_description || '' };
+        this.message = 'Todo completed.';
+        await this.loadTodos();
+      } catch (error) {
+        this.error = error.message;
+      }
+    },
+
+    async reopenTodo() {
+      if (!this.editing.id) return;
+      this.clearMessages();
+      try {
+        const response = await fetch(`${API}/todos/${this.editing.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'open' }),
+        });
+        if (!response.ok) throw new Error('Failed to reopen todo.');
+        const todo = await response.json();
+        this.selected = todo;
+        this.editing = { ...todo, completion_description: todo.completion_description || '' };
+        this.message = 'Todo reopened.';
+        await this.loadTodos();
+      } catch (error) {
+        this.error = error.message;
+      }
+    },
+
+    async deleteTodo() {
+      if (!this.editing.id) return;
+      if (!window.confirm(`Delete todo #${this.editing.id}?`)) return;
+
+      this.clearMessages();
+      try {
+        const response = await fetch(`${API}/todos/${this.editing.id}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Failed to delete todo.');
+        this.selected = null;
+        this.editing = blankTodo();
+        this.message = 'Todo deleted.';
+        await this.loadTodos();
+      } catch (error) {
+        this.error = error.message;
+      }
+    },
+
+    async exportTodos() {
+      this.clearMessages();
+      try {
+        const response = await fetch(`${API}/todos/export`);
+        if (!response.ok) throw new Error('Failed to export todos.');
+        const payload = await response.json();
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = 'todos.json';
+        anchor.click();
+        URL.revokeObjectURL(url);
+        this.message = 'Todos exported.';
+      } catch (error) {
+        this.error = error.message;
+      }
+    },
+
+    triggerImport(mode) {
+      this.importMode = mode;
+      this.$refs.importInput.value = '';
+      this.$refs.importInput.click();
+    },
+
+    async handleImport(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      this.clearMessages();
+      try {
+        const text = await file.text();
+        const payload = JSON.parse(text);
+        payload.mode = this.importMode;
+        if (!Array.isArray(payload.todos)) {
+          throw new Error('Import JSON must contain a top-level "todos" array.');
+        }
+
+        const response = await fetch(`${API}/todos/import`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error('Failed to import todos.');
+        const result = await response.json();
+        this.message = `Imported ${result.imported} todos (created=${result.created}, updated=${result.updated}, replaced=${result.replaced}).`;
+        await this.loadTodos();
+      } catch (error) {
+        this.error = error.message;
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

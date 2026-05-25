@@ -1,128 +1,119 @@
 # Rate Limiting Doctrine
 
-These rules are non-negotiable. This machine has no proxy or VPN during development.
-A ban affects every scraper running from this IP.
+All new scrapers should use **request-auth** as the primary rate-limiting mechanism.
+
+The old local doctrine (`RateLimiter`, randomized sleeps, `backoff.json`, permanent local bans)
+is obsolete for this skill. The goal is **centralized**, server-observed rate limiting so every
+scraper in the cluster behaves consistently.
 
 ---
 
-## Request Delays
+## Core rules
 
-**HTML page fetches:** 1.0–2.5 seconds between requests.
-```python
-import time, random
-time.sleep(random.uniform(1.0, 2.5))
-```
+1. **Every target-site request needs a permit**
+   - `requests.get(...)`
+   - `requests.post(...)`
+   - Playwright `page.goto(...)`
+   - Playwright `page.evaluate(fetch(...))`
+   - direct media downloads before storing in imgcache / vidcache / filecache
 
-**AJAX / JSON API endpoints:** 0.5–1.0 seconds between requests.
-```python
-time.sleep(random.uniform(0.5, 1.0))
-```
+2. **Cache-service calls do not need permits**
+   - `web_cache.get(...)`
+   - `web_cache.store(...)`
+   - `img_cache.lookup(...)`
+   - `img_cache.store(...)`
+   - `vid_cache.*`
+   - `file_cache.*`
 
-Randomize the delay — fixed intervals are easier for bot-detection heuristics to flag.
+3. **Report the real response status back to request-auth**
+   - call `permit.set_status(resp.status_code)` on success
+   - let the context manager auto-release with status `0` on exceptions
+
+4. **Do not create local rate-limit state**
+   - no `backoff.json`
+   - no per-scraper ban registry
+   - no local 429 cooldown logic that competes with request-auth
+
+5. **Stop the current run on repeated or terminal rate-limiting signals if appropriate**
+   - but treat that as a scraper/runtime decision, not a second local rate-limiter
+   - request-auth should remain the source of truth for global pacing/backoff
 
 ---
 
-## Sequential Only
-
-Never fire requests in parallel batches. All scraping loops must be sequential:
-
-- No `asyncio.gather()` over multiple URLs
-- No `ThreadPoolExecutor` / `ProcessPoolExecutor` for fetches
-- Playwright: one page at a time, not a pool
-
-Parallelism saves maybe 30% wall time and risks a permanent ban. It is never worth it.
-
----
-
-## 429 Handling — Permanent Backoff
-
-A 429 means stop immediately. Do not auto-retry with a sleep. Write the ban to disk and raise
-`SystemExit` so the scraper halts cleanly. Future runs check this file at startup.
+## Standard pattern
 
 ```python
-import json
-from pathlib import Path
-from datetime import datetime, timezone
+from request_auth_client import RequestAuthClient
 
-BACKOFF_FILE = Path("backoff.json")
+request_auth = RequestAuthClient(REQUEST_AUTH_SERVER_URL)
 
-def load_backoff() -> dict:
-    if BACKOFF_FILE.exists():
-        return json.loads(BACKOFF_FILE.read_text())
-    return {}
-
-def check_backoff(domain: str) -> None:
-    """Call at scraper startup. Aborts if this domain is in backoff state."""
-    state = load_backoff()
-    if domain in state:
-        info = state[domain]
-        raise SystemExit(
-            f"[BACKOFF] {domain} was rate-limited at {info['banned_at']}. "
-            f"Remove this entry from {BACKOFF_FILE} to resume."
-        )
-
-def record_ban(domain: str, retry_after: str | None = None) -> None:
-    """Call when a 429 is received. Always raises SystemExit."""
-    state = load_backoff()
-    state[domain] = {
-        "banned_at": datetime.now(timezone.utc).isoformat(),
-        "retry_after": retry_after,
-    }
-    BACKOFF_FILE.write_text(json.dumps(state, indent=2))
-    raise SystemExit(
-        f"[BACKOFF] 429 received from {domain}. Written to {BACKOFF_FILE}. "
-        f"Do not resume until manually cleared."
-    )
-```
-
-### Usage in generated scrapers
-
-```python
-from urllib.parse import urlparse
-
-DOMAIN = urlparse(BASE_URL).netloc  # e.g. "www.rockauto.com"
-
-def main():
-    check_backoff(DOMAIN)   # abort if previously banned
-    # ... scraping loop ...
-
-# In your fetch function:
 try:
-    resp = session.get(url, timeout=30)
-    if resp.status_code == 429:
-        retry_after = resp.headers.get("Retry-After")
-        record_ban(DOMAIN, retry_after)  # raises SystemExit
-    resp.raise_for_status()
-except requests.HTTPError as e:
-    if e.response.status_code == 429:
-        record_ban(DOMAIN)
-    raise
+    with request_auth.acquire(DOMAIN) as permit:
+        resp = session.get(url, timeout=30)
+        permit.set_status(resp.status_code)
+        resp.raise_for_status()
+finally:
+    request_auth.close()
 ```
 
-`backoff.json` is a local file in the scraper's working directory. To resume after a ban, delete
-the relevant domain key from `backoff.json` (or delete the file entirely). There is no automatic
-clearance — the intent is that a human decides when it is safe to resume.
+This is the preferred pattern because exceptions automatically release the permit with status `0`.
 
 ---
 
-## Retry Logic (non-429 errors)
-
-For transient errors (500, timeout, connection reset), retry with exponential backoff. Do NOT
-apply this to 429s — those go through `record_ban()` instead.
+## Playwright pattern
 
 ```python
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-import requests
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception_type(requests.ConnectionError),
-)
-def fetch_with_retry(session, url):
-    resp = session.get(url, timeout=30)
-    if resp.status_code == 429:
-        record_ban(urlparse(url).netloc)  # raises SystemExit — tenacity won't catch it
-    resp.raise_for_status()
-    return resp
+with request_auth.acquire(DOMAIN) as permit:
+    response = page.goto(url, wait_until="networkidle", timeout=30_000)
+    permit.set_status(response.status if response else 0)
 ```
+
+Or for an intercepted browser fetch:
+
+```python
+with request_auth.acquire(DOMAIN) as permit:
+    status_code, html = page.evaluate(
+        """async (url) => {
+            const r = await fetch(url, {headers: {"x-requested-with": "XMLHttpRequest"}});
+            return [r.status, await r.text()];
+        }""",
+        url,
+    )
+    permit.set_status(status_code)
+```
+
+---
+
+## 429 handling
+
+When a scraper receives a 429:
+
+- report `429` back through `permit.set_status(429)`
+- surface the failure clearly in logs / the scraper result
+- stop or abort the current run if continuing would be wasteful
+- **do not** write a local ban file or invent a separate retry schedule
+
+Example:
+
+```python
+with request_auth.acquire(DOMAIN) as permit:
+    resp = session.get(url, timeout=30)
+    permit.set_status(resp.status_code)
+    if resp.status_code == 429:
+        raise SystemExit(f"429 from {DOMAIN}; request-auth has been informed")
+    resp.raise_for_status()
+```
+
+---
+
+## Local sleeps
+
+Do **not** add routine randomized sleeps as a substitute for request-auth.
+
+Small waits may still be useful for:
+
+- UI synchronization in Playwright
+- deliberate pacing for browser interactions on fragile sites
+- site-specific requirements the user explicitly wants
+
+But for ordinary HTTP pacing, request-auth should be the default mechanism.

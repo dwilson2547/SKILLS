@@ -3,24 +3,7 @@
 Use only after Phase 1 step 3 (replay test) confirmed that the captured API request returns the
 expected data when replayed with `requests` using the browser's exact headers and cookies.
 
-**Do not attempt this template if the replay hasn't been verified.** Modern APIs are routinely
-secured with tokens, fingerprinting, or cookie chains that require a live browser. If you haven't
-run the replay test, default to `scraper-types/playwright-rendered.md` instead.
-
-If the API requires session cookies that can't be replayed, combine with
-`scraper-types/authenticated.md` to bootstrap the session via Playwright, then use `requests`.
-
----
-
-## Investigation Notes for This Type
-
-During Phase 1, document these before writing code:
-
-- **Endpoint URL** and all query parameters (page, limit, offset, sort, etc.)
-- **Required headers**: `Authorization`, `X-Api-Key`, `Referer`, `Origin`, custom headers
-- **Required cookies**: run the cookie isolation sub-routine if a bare request returns 403
-- **Response schema**: what keys hold items, total count, next-page indicator
-- **Pagination style**: `?page=N`, `?offset=N`, cursor token in response, or link headers
+**Do not attempt this template if the replay hasn't been verified.**
 
 ---
 
@@ -28,147 +11,121 @@ During Phase 1, document these before writing code:
 
 ```python
 #!/usr/bin/env python3
-# Site: [Site Name]
-# Strategy: ajax-api
-# Discovered endpoint: [API URL from investigation]
-# Last recon: [YYYY-MM-DD]
 
 import json
 import logging
-import time
-import random
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
-from bot_scraper_lib import build_context, RateLimiter, make_record, write_record
+from cache_client import ImgCacheClient, WebCacheClient
+from request_auth_client import RequestAuthClient
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# --- Config ---
-BASE_URL  = "https://example.com/api/v1/parts"
-DOMAIN    = urlparse(BASE_URL).netloc
+BASE_URL = "https://example.com/api/v1/parts"
+DOMAIN = urlparse(BASE_URL).netloc
+CLIENT_NAME = "my_scraper"
 PAGE_SIZE = 50
-HEADERS   = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept": "application/json",
-    "Referer": "https://example.com/",
-    # "Authorization": "Bearer ...",  # add if required
-}
 OUTPUT_FILE = Path(f"results_{datetime.now():%Y%m%d_%H%M%S}.jsonl")
 
-# --- Backoff ---
-limiter = RateLimiter(DOMAIN)
+WEBCACHE_URL = os.environ.get("WEBCACHE_URL", "http://webcache.scrapestack.local")
+IMGCACHE_URL = os.environ.get("IMGCACHE_URL", "http://imgcache.scrapestack.local")
+REQUEST_AUTH_SERVER_URL = os.environ.get(
+    "REQUEST_AUTH_SERVER_URL",
+    "request-auth-server.scrapestack.local:9000",
+)
+CACHE_MAX_AGE_SECONDS = int(os.environ.get("CACHE_MAX_AGE_SECONDS", str(23 * 3600)))
 
-SELECTORS = {
-    # For API scrapers, document the response keys rather than CSS selectors
-    "items_key":    "items",        # top-level key holding the list
-    "total_key":    "total",        # key for total record count (or None)
-    "part_number":  "sku",          # field name for part number
-    "title":        "name",
-    "price":        "price",
-    "condition":    "condition",
-    "image_url":    "image_url",
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json",
+    "Referer": "https://example.com/",
 }
 
 
-def fetch_page(session: requests.Session, page: int, ctx) -> dict:
-    params = {"page": page, "limit": PAGE_SIZE}
-    cache_url = f"{BASE_URL}?page={page}&limit={PAGE_SIZE}"
-    entry = ctx.web_cache.get(cache_url)
+def write_jsonl_record(out_file, record: dict) -> None:
+    out_file.write(json.dumps(record, ensure_ascii=False) + "\n")
+    out_file.flush()
+
+
+def fetch_page(session, page_num: int, web_cache, request_auth) -> dict:
+    params = {"page": page_num, "limit": PAGE_SIZE}
+    cache_key = f"{BASE_URL}?page={page_num}&limit={PAGE_SIZE}"
+    entry = web_cache.get(cache_key, max_age=CACHE_MAX_AGE_SECONDS)
     if entry:
         return json.loads(entry["content"])
 
-    resp = session.get(BASE_URL, params=params, headers=HEADERS, timeout=30)
-    if resp.status_code == 429:
-        limiter.ban(resp.headers.get("Retry-After"))
-    resp.raise_for_status()
+    with request_auth.acquire(DOMAIN) as permit:
+        resp = session.get(BASE_URL, params=params, headers=HEADERS, timeout=30)
+        permit.set_status(resp.status_code)
+        if resp.status_code == 429:
+            raise SystemExit(f"429 from {DOMAIN}; request-auth has been informed")
+        resp.raise_for_status()
+        body = resp.text
 
-    ctx.web_cache.store(cache_url, resp.text, ctx.client_name)
-    return resp.json()
-
-
-def parse_item(item: dict, ctx) -> dict:
-    image_url = item.get(SELECTORS["image_url"])
-    image_hash = None
-    if image_url and ctx.img_cache:
-        try:
-            meta = ctx.img_cache.lookup(image_url)
-            if meta:
-                image_hash = meta["content_hash"]
-            else:
-                import requests as req
-                result = ctx.img_cache.store(image_url, req.get(image_url, timeout=15).content, ctx.client_name)
-                image_hash = result["content_hash"]
-        except Exception as e:
-            logger.warning(f"Image cache failed for {image_url}: {e}")
-
-    return make_record(
-        DOMAIN,
-        BASE_URL,
-        part_number=str(item.get(SELECTORS["part_number"], "")),
-        condition=item.get(SELECTORS["condition"], "new"),
-        title=item.get(SELECTORS["title"]),
-        price=item.get(SELECTORS["price"]),
-        image_url=image_url,
-        image_content_hash=image_hash,
-        # video_content_hash=video_hash,  # add when with_videos=True
-    )
+    web_cache.store(cache_key, body, CLIENT_NAME)
+    return json.loads(body)
 
 
-def main():
-    limiter.check()
+def cache_image(image_url: str | None, session, img_cache, request_auth) -> str | None:
+    if not image_url:
+        return None
+    meta = img_cache.lookup(image_url)
+    if meta:
+        return meta["content_hash"]
 
-    with build_context("my_scraper", with_images=True) as ctx:
-        # Add with_videos=True for scrapers that collect video files.
-        session = requests.Session()
-        page = 1
-        total_scraped = 0
+    with request_auth.acquire(DOMAIN) as permit:
+        resp = session.get(image_url, timeout=30)
+        permit.set_status(resp.status_code)
+        resp.raise_for_status()
+        image_bytes = resp.content
 
-        with open(OUTPUT_FILE, "a", encoding="utf-8") as out:
-            while True:
-                logger.info(f"Fetching page {page}...")
-                data = fetch_page(session, page, ctx)
-
-                items = data.get(SELECTORS["items_key"], [])
-                if not items:
-                    logger.info("No more items.")
-                    break
-
-                for item in items:
-                    record = parse_item(item, ctx)
-                    write_record(record, out)
-                    total_scraped += 1
-
-                logger.info(f"Page {page}: {len(items)} items (total: {total_scraped})")
-
-                # Check for last page
-                total = data.get(SELECTORS["total_key"])
-                if total and total_scraped >= total:
-                    break
-                if len(items) < PAGE_SIZE:
-                    break
-
-                page += 1
-                limiter.wait(ajax=True)
-
-    logger.info(f"Done. {total_scraped} records → {OUTPUT_FILE}")
+    return img_cache.store(image_url, image_bytes, CLIENT_NAME)["content_hash"]
 
 
-if __name__ == "__main__":
-    main()
+def parse_item(item: dict, session, img_cache, request_auth) -> dict:
+    image_url = item.get("image_url")
+    return {
+        "site": CLIENT_NAME,
+        "source_url": BASE_URL,
+        "scraped_at": datetime.now(timezone.utc).isoformat(),
+        "part_number": str(item.get("sku", "")),
+        "title": item.get("name"),
+        "price": item.get("price"),
+        "condition": item.get("condition"),
+        "image_content_hash": cache_image(image_url, session, img_cache, request_auth),
+    }
+
+
+def main() -> None:
+    session = requests.Session()
+    request_auth = RequestAuthClient(REQUEST_AUTH_SERVER_URL)
+    try:
+        with WebCacheClient(WEBCACHE_URL) as web_cache, ImgCacheClient(IMGCACHE_URL) as img_cache:
+            page_num = 1
+            with open(OUTPUT_FILE, "a", encoding="utf-8") as out:
+                while True:
+                    data = fetch_page(session, page_num, web_cache, request_auth)
+                    items = data.get("items", [])
+                    if not items:
+                        break
+                    for item in items:
+                        write_jsonl_record(out, parse_item(item, session, img_cache, request_auth))
+                    if len(items) < PAGE_SIZE:
+                        break
+                    page_num += 1
+    finally:
+        request_auth.close()
 ```
 
 ---
 
-## Gotchas
+## Notes
 
-- **Session cookies required**: If bare `requests.get()` returns 403, the API needs browser-set
-  cookies. Use `scraper-types/authenticated.md` to bootstrap, then continue with this template.
-- **GraphQL**: POST to the endpoint with `{"query": "...", "variables": {...}}`. Cache the
-  serialized request body as part of the cache key (append a hash of the variables to the URL).
-- **Rate limit on API**: Some sites are more aggressive on API endpoints than HTML pages.
-  Start at 1 req/s and watch for 429s before relaxing.
-- **Cursor pagination**: Replace the `page` counter with the cursor token returned by each response.
+- Request-auth permits wrap only the target-site requests.
+- Cache lookups/stores stay outside the permit.
+- Do not add local `backoff.json` or a second rate limiter.

@@ -1,0 +1,31 @@
+services:
+  api:
+    build: ./api
+    image: dwilson2547/todo-store-api:0.1.0
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8003/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - todo-store-net
+
+  ui:
+    build: ./ui
+    image: dwilson2547/todo-store-ui:0.1.0
+    ports:
+      - "3003:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - todo-store-net
+
+networks:
+  todo-store-net:

@@ -9,9 +9,11 @@ description: >
   this page" — the investigation phase is always the right starting point, even for seemingly simple sites.
   This skill requires the Playwright MCP to be connected.
 
-  Generated scrapers must: (1) check the webcache before every page fetch, (2) route all image
-  downloads through the imgcache, (3) limit request rate to 1–2 req/s sequential, and (4) stop
-  permanently on any 429 response. See references/ for the full doctrine on each.
+  Generated scrapers must: (1) use scrape-stack clients by default, (2) check the webcache before
+  every target-site fetch, (3) route media through the scrape-stack cache layers, and (4) use
+  request_auth_client permits around target-site requests so central rate limiting is observed.
+  Cache-service calls stay outside permits, and scrapers should not implement competing local
+  backoff logic. See references/ for the full doctrine on each.
 ---
 
 # Web Scraper Development Skill
@@ -29,14 +31,14 @@ These apply to every scraper regardless of type. Read `references/cache-integrat
 
 | Rule | Short form |
 |------|-----------|
-| **Cache before fetch** | Always call `ctx.web_cache.get(url)` before any page request. Store on miss. |
-| **Cache images** | Never download an image directly — route through `ctx.img_cache`. Requires `[images]` extra. |
-| **Cache videos** | Never download a video directly — route through `ctx.vid_cache`. Requires `[videos]` extra. |
-| **Sequential requests** | No parallel fetches. One request at a time. |
-| **Rate limit** | 1–2 req/s for page HTML; 0.5–1 req/s for AJAX/JSON endpoints. |
-| **Permanent 429 backoff** | On any 429: write to `backoff.json`, raise `SystemExit`. Do not retry. |
+| **Scrape-stack first** | Default to `dwilson-cache-client` + `dwilson-request-auth-client`, not `bot_scraper_lib`. |
+| **Cache before fetch** | Always call `WebCacheClient.get(url, max_age=...)` before any target-site request. Store on miss. |
+| **Cache images** | Route image ingestion through `ImgCacheClient`; fetch source bytes under a request-auth permit. |
+| **Cache videos/files** | Route larger media through `VidCacheClient` / `FileCacheClient` when needed. |
+| **Request authorization** | Wrap target-site requests in `with request_auth.acquire(DOMAIN) as permit:` and report the real status code. |
+| **Permit scope** | Request-auth wraps target-site requests only — not webcache/imgcache/vidcache/filecache calls. |
+| **No local backoff layer** | Do not create `backoff.json` or a second rate-limiter that competes with request-auth. |
 | **Incremental saves** | Write and flush each record as scraped. Never batch-write at the end. |
-| **Library context** | All scrapers open with `build_context()` from `bot_scraper_lib`. |
 
 ---
 
@@ -87,101 +89,49 @@ window.fetch = function(url, opts) {
 ```
 
 Then trigger the action that loads data (scroll, click pagination, submit search), and inspect:
+
 ```javascript
-// In playwright_evaluate:
 window.__captured
 ```
 
 Also use the Playwright MCP network tab or `playwright_network_requests` if available — it gives
 the full request including headers and response body without the JS monkey-patch.
 
-Once you have the data request URL, extract the **complete** headers and cookies from the browser:
-```javascript
-// In playwright_evaluate — get all cookies for the domain
-document.cookie
-```
-
-Or via Playwright context: `page.context().cookies()` gives the full structured cookie jar.
+Once you have the data request URL, extract the **complete** headers and cookies from the browser.
 
 #### 3. Attempt requests Replay with Captured Headers
 
-Take the exact URL, headers, and cookies captured in step 2 and replay with `requests`:
+Take the exact URL, headers, and cookies captured in step 2 and replay with `requests`.
 
-```python
-import requests
-
-# Paste captured headers directly — do not guess or simplify
-headers = {
-    "User-Agent": "<copied from browser>",
-    "Accept": "<copied>",
-    "Referer": "<copied>",
-    "X-Requested-With": "<copied if present>",
-    # ... all headers from the captured request
-}
-cookies = {
-    "session_id": "<value>",
-    # ... all cookies from page.context().cookies()
-}
-
-resp = requests.get(captured_url, headers=headers, cookies=cookies)
-print(resp.status_code, resp.text[:500])
-```
-
-**If replay returns the expected data** → use `requests` for the scraping loop (see Phase 2).
-**If replay returns 401/403** → run the cookie isolation sub-routine to find the minimal required
-set, then try again. If it still fails, stay on Playwright.
-**If replay works with 0 cookies** → the endpoint is public; no session needed.
+- **If replay returns the expected data** → use `requests` for the scraping loop (see Phase 2)
+- **If replay returns 401/403** → run the cookie isolation sub-routine, then try again
+- **If replay works with 0 cookies** → the endpoint is public; no session needed
 
 #### 4. Cookie Isolation Sub-routine
 
 When a replay fails authentication, binary-search for the minimal required cookie set.
-With N cookies this takes at most N requests, not 2^N combinations:
-
-```python
-# Only run this if bare replay failed — don't pre-emptively strip cookies
-all_cookies = list(page_cookies.items())
-required = []
-for name, value in all_cookies:
-    test_cookies = dict(required + [(name, value)])
-    resp = requests.get(captured_url, headers=headers, cookies=test_cookies)
-    if resp.status_code == 200:
-        required.append((name, value))
-    time.sleep(0.5)
-
-print("Minimal required cookies:", [k for k, _ in required])
-```
 
 #### 5. Selector Discovery
-```javascript
-// In playwright_evaluate:
-[...document.querySelectorAll('.product-card')].map(el => ({
-  title: el.querySelector('.title')?.textContent?.trim(),
-  price: el.querySelector('[data-price]')?.textContent?.trim(),
-  url: el.querySelector('a')?.href
-}))
-```
 
 Prefer selectors in this stability order: `[data-testid]` > semantic tags > stable class names >
 ID-based > structural (`div:nth-child(3)`). Avoid hashed CSS classes (`sc-abc123`) — they change
 on every deploy.
 
 #### 6. Pagination Analysis
+
 Click through pagination and observe:
+
 - URL changes (`?page=2`) → simple loop, no browser needed
 - No URL change, new content loads → infinite scroll or AJAX pagination
 - Hidden "next" button → Playwright click-based pagination
 
-For infinite scroll:
-```javascript
-window.scrollTo(0, document.body.scrollHeight);
-// screenshot to verify new content loaded
-```
-
 #### 7. Auth & Bot Detection Signals
+
 Watch for:
+
 - Login redirects → need cookie/session bootstrapping via Playwright
 - CAPTCHAs → delays, stealth headers, or bypass service
-- `403` / `429` → rate-limit; see `references/rate-limiting.md`
+- `403` / `429` → auth / rate-limit / bot block; see `references/rate-limiting.md`
 - Cloudflare challenge pages → `playwright-stealth` or Camoufox
 
 ---
@@ -203,8 +153,8 @@ Document your strategy decision with reasoning before generating code.
 
 **Framework preference order:**
 1. Playwright — always start here; it is the known-working baseline
-2. requests + JSON — only if Phase 1 replay confirmed it works with captured headers
-3. requests + BS4 — only if Phase 1 replay confirmed static HTML works
+2. `requests` + JSON — only if Phase 1 replay confirmed it works with captured headers
+3. `requests` + BS4 — only if Phase 1 replay confirmed static HTML works
 4. Selenium — legacy/fallback only, not worth building against
 
 ---
@@ -212,8 +162,8 @@ Document your strategy decision with reasoning before generating code.
 ## Phase 3: Scraper Implementation
 
 Read the appropriate sub-skill from `references/scraper-types/` based on Phase 2 selection.
-Each sub-skill contains a complete, ready-to-adapt template that already integrates the cache
-and rate-limiting rules.
+Each sub-skill contains a complete, ready-to-adapt template that already integrates scrape-stack
+cache clients and request-auth.
 
 All generated scrapers share these structural requirements:
 
@@ -228,25 +178,36 @@ All generated scrapers share these structural requirements:
 
 ### SELECTORS Block (required)
 Separate all selectors from logic. When a scraper breaks due to site redesign, only this
-block needs updating:
+block needs updating.
+
+### Client setup (required)
+Generated scrapers should explicitly initialize scrape-stack clients:
+
 ```python
-SELECTORS = {
-    "item_container": ".product-card",
-    "part_number":    ".sku-value",
-    "price":          "[data-price]",
-    "fitment_table":  "#fitment-grid",
-    "next_page":      'button[aria-label="Next page"]',
-}
+from cache_client import ImgCacheClient, WebCacheClient
+from request_auth_client import RequestAuthClient
+
+with WebCacheClient(WEBCACHE_URL) as web_cache, ImgCacheClient(IMGCACHE_URL) as img_cache:
+    request_auth = RequestAuthClient(REQUEST_AUTH_SERVER_URL)
+    try:
+        scrape(web_cache=web_cache, img_cache=img_cache, request_auth=request_auth)
+    finally:
+        request_auth.close()
 ```
 
 ### Output Schema
-Use `make_record` and `write_record` from `bot_scraper_lib`. Records are plain dicts with
-`site`, `source_url`, and `scraped_at` stamped automatically. Output to JSONL:
-```python
-from bot_scraper_lib import make_record, write_record
+Use plain dictionaries and write incrementally to JSONL (or the project's persistent store if the
+scraper is being integrated into an existing ingestion pipeline):
 
-record = make_record("example_site", page_url, title="Widget", price="9.99", sku="W-123")
-write_record(record, out_file)  # writes one JSON line and flushes
+```python
+record = {
+    "site": "example_site",
+    "source_url": page_url,
+    "scraped_at": datetime.utcnow().isoformat(),
+    "title": "Widget",
+    "price": "9.99",
+    "sku": "W-123",
+}
 ```
 
 ### Error Self-Classification
@@ -255,7 +216,7 @@ On exit, log the failure mode rather than just crashing:
 | Error type | Cause | Repair action |
 |------------|-------|---------------|
 | Empty results, no HTTP error | Selector drift | Recon → selector patch |
-| 403 / 429 | Rate limit / IP block | See rate-limiting.md |
+| 403 / 429 | Auth / rate-limit / bot block | See rate-limiting.md and verify permit usage |
 | CAPTCHA page | Bot detection | Stealth headers, delay increase |
 | Schema mismatch | Output fields missing | Recon → field map update |
 | Timeout | JS change / site slowdown | Wait condition update |
@@ -269,14 +230,14 @@ After completing all three phases, deliver:
 1. **Investigation Summary** — answers to the 7 checklist items above, with selector output
    as evidence
 2. **Strategy Decision** — which sub-skill and why, with trade-offs noted
-3. **Complete Scraper Code** — runnable, using `build_context()` and `make_record()`
+3. **Complete Scraper Code** — runnable, using scrape-stack cache clients and request-auth by default
 4. **Usage Instructions** — how to run it, output file produced, parameters to adjust
 
 ---
 
 ## Ethical & Legal Reminders
 
-- Always check `robots.txt` first (step 1 of investigation)
+- Always check `robots.txt` first
 - Don't scrape personal data without understanding GDPR/CCPA applicability
 - Terms of Service may prohibit scraping — flag to user if ToS is restrictive
 - Prefer official APIs over scraping when they exist

@@ -1,171 +1,160 @@
 # Cache Integration
 
-All scrapers must route page fetches through the webcache and image downloads through the imgcache.
-Never fetch a URL without checking the cache first.
+All new scrapers should be designed for the **scrape-stack** ecosystem by default.
 
-## Setup
+- HTML / rendered page content → `WebCacheClient`
+- Images → `ImgCacheClient`
+- Videos → `VidCacheClient`
+- Generic downloaded files → `FileCacheClient` when needed
+- Target-site rate limiting / permits → `RequestAuthClient`
+
+The old `bot_scraper_lib` guidance is obsolete. New scrapers should wire the scrape-stack clients
+directly.
+
+---
+
+## Installation
 
 ```bash
-pip install dwilson-bot-scraper-lib                        # core (webcache only)
-pip install "dwilson-bot-scraper-lib[images]"              # + image caching
-pip install "dwilson-bot-scraper-lib[videos]"              # + video caching
-pip install "dwilson-bot-scraper-lib[images,videos]"       # + both
-pip install "dwilson-bot-scraper-lib[playwright]"          # + Playwright bootstrap
+pip install dwilson-cache-client
+pip install dwilson-request-auth-client
 ```
 
-`imgcache_client` and `vidcache_client` are optional extras. The library imports them lazily
-and raises a clear `ImportError` with the correct `pip install` command if they are missing
-and `with_images=True` / `with_videos=True` is requested.
+Or install from local scrape-stack package directories if you are developing against the workspace:
 
-## Scraper Context
-
-Use `build_context()` from `bot_scraper_lib` to wire up both clients at once:
-
-```python
-from bot_scraper_lib import build_context
-
-# Images only
-with build_context("rockauto_parts", with_images=True) as ctx:
-    # ctx.web_cache  → WebCacheClient
-    # ctx.img_cache  → ImgCacheClient
-    # ctx.vid_cache  → None
-    scrape(ctx)
-
-# Videos only
-with build_context("youtube_archive", with_videos=True) as ctx:
-    # ctx.web_cache  → WebCacheClient
-    # ctx.img_cache  → None
-    # ctx.vid_cache  → VidCacheClient
-    scrape(ctx)
-
-# Both
-with build_context("media_site", with_images=True, with_videos=True) as ctx:
-    scrape(ctx)
-```
-
-`client_name` must be a stable lowercase identifier for the scraper (e.g. `"rockauto_parts"`).
-It is stored with every cache entry for attribution and debugging.
-
-**Environment variables** (override defaults; or use a TOML file via `SCRAPER_CONFIG`):
-- `WEBCACHE_URL` — default `http://localhost:8000`
-- `IMGCACHE_URL` — default `http://localhost:8010`
-- `VIDCACHE_URL` — default `http://localhost:8020`
-
-**TOML config** (set `SCRAPER_CONFIG=/path/to/config.toml`):
-```toml
-[webcache]
-url = "http://localhost:8000"
-
-[imgcache]
-url = "http://localhost:8010"
-
-[vidcache]
-url = "http://localhost:8020"
+```bash
+pip install /path/to/web_scrapers/scrape_stack/libs/cache_client
+pip install /path/to/web_scrapers/scrape_stack/services/request_authorization/client
 ```
 
 ---
 
-## WebCache — Page Content
+## Default service endpoints
 
-### Mandatory check-before-fetch pattern
+These should be the default assumptions for newly generated scrapers:
 
 ```python
-def fetch_page(url: str, session, ctx) -> str:
-    """Fetch a page, using the cache if available."""
-    entry = ctx.web_cache.get(url)
-    if entry:
-        return entry["content"]
-    resp = session.get(url, timeout=30)
-    resp.raise_for_status()
-    ctx.web_cache.store(url, resp.text, ctx.client_name)
-    return resp.text
+import os
+
+WEBCACHE_URL = os.environ.get("WEBCACHE_URL", "http://webcache.scrapestack.local")
+IMGCACHE_URL = os.environ.get("IMGCACHE_URL", "http://imgcache.scrapestack.local")
+VIDCACHE_URL = os.environ.get("VIDCACHE_URL", "http://vidcache.scrapestack.local")
+FILECACHE_URL = os.environ.get("FILECACHE_URL", "http://filecache.scrapestack.local")
+REQUEST_AUTH_SERVER_URL = os.environ.get(
+    "REQUEST_AUTH_SERVER_URL",
+    "request-auth-server.scrapestack.local:9000",
+)
+CACHE_MAX_AGE_SECONDS = int(os.environ.get("CACHE_MAX_AGE_SECONDS", str(23 * 3600)))
 ```
 
-### Playwright variant
+Use a stable lowercase `CLIENT_NAME` for every scraper (for example `"pyp"` or `"rockauto_parts"`).
+
+---
+
+## Client setup
 
 ```python
-async def fetch_page(url: str, page, ctx) -> str:
-    entry = ctx.web_cache.get(url)
+from cache_client import FileCacheClient, ImgCacheClient, VidCacheClient, WebCacheClient
+from request_auth_client import RequestAuthClient
+
+CLIENT_NAME = "my_scraper"
+
+with WebCacheClient(WEBCACHE_URL) as web_cache, \
+     ImgCacheClient(IMGCACHE_URL) as img_cache, \
+     VidCacheClient(VIDCACHE_URL) as vid_cache, \
+     FileCacheClient(FILECACHE_URL) as file_cache:
+    request_auth = RequestAuthClient(REQUEST_AUTH_SERVER_URL)
+    try:
+        scrape(
+            web_cache=web_cache,
+            img_cache=img_cache,
+            vid_cache=vid_cache,
+            file_cache=file_cache,
+            request_auth=request_auth,
+        )
+    finally:
+        request_auth.close()
+```
+
+If a scraper does not need images, videos, or files, omit those clients rather than creating a
+generic helper abstraction up front.
+
+---
+
+## WebCache — mandatory check-before-fetch
+
+### `requests` pattern
+
+```python
+def fetch_html(url: str, session, web_cache, request_auth, domain: str) -> str:
+    entry = web_cache.get(url, max_age=CACHE_MAX_AGE_SECONDS)
     if entry:
         return entry["content"]
-    await page.goto(url, wait_until="networkidle")
-    html = await page.content()   # rendered HTML, post-JS
-    ctx.web_cache.store(url, html, ctx.client_name)
+
+    with request_auth.acquire(domain) as permit:
+        resp = session.get(url, timeout=30)
+        permit.set_status(resp.status_code)
+        resp.raise_for_status()
+        html = resp.text
+
+    web_cache.store(url, html, CLIENT_NAME)
     return html
 ```
 
-### Client API reference
+### Playwright pattern
 
-| Method | Returns | Notes |
-|--------|---------|-------|
-| `ctx.web_cache.get(url)` | `dict` or `None` | `dict["content"]` is the full HTML string |
-| `ctx.web_cache.store(url, html, client_name)` | metadata dict | 201 = new, 200 = duplicate |
-| `ctx.web_cache.search(url_contains)` | list of metadata dicts | No content in results |
-| `ctx.web_cache.get_by_hash(hash)` | `dict` or `None` | Retrieve by content hash |
+```python
+def fetch_rendered_html(url: str, page, web_cache, request_auth, domain: str) -> str:
+    entry = web_cache.get(url, max_age=CACHE_MAX_AGE_SECONDS)
+    if entry:
+        return entry["content"]
 
-Store **rendered HTML** (post-JS), not raw response bytes. For `requests`-based scrapers where
-the content is static, `resp.text` is fine.
+    with request_auth.acquire(domain) as permit:
+        response = page.goto(url, wait_until="networkidle", timeout=30_000)
+        permit.set_status(response.status if response else 0)
+        html = page.content()
+
+    web_cache.store(url, html, CLIENT_NAME)
+    return html
+```
+
+**Important:** cache lookups and cache writes do **not** need request-auth permits. Permits wrap
+only the actual target-site request.
 
 ---
 
-## ImgCache — Product Images
-
-Only needed when the scraper collects product images. Pass `with_images=True` to `build_context()`.
+## ImgCache — route image ingestion through scrape-stack
 
 ```python
-def cache_image(image_url: str, ctx) -> str:
-    """Download and cache an image. Returns content_hash."""
-    meta = ctx.img_cache.lookup(image_url)
+def cache_image(image_url: str, session, img_cache, request_auth, domain: str) -> str | None:
+    if not image_url:
+        return None
+
+    meta = img_cache.lookup(image_url)
     if meta:
         return meta["content_hash"]
-    img_bytes = requests.get(image_url, timeout=30).content
-    result = ctx.img_cache.store(image_url, img_bytes, ctx.client_name)
+
+    with request_auth.acquire(domain) as permit:
+        resp = session.get(image_url, timeout=30)
+        permit.set_status(resp.status_code)
+        resp.raise_for_status()
+        image_bytes = resp.content
+
+    result = img_cache.store(image_url, image_bytes, CLIENT_NAME)
     return result["content_hash"]
 ```
 
-Store the returned `content_hash` in the record (e.g. as `image_content_hash`). Do not store the
-image URL as a durable reference — URLs break; the hash does not.
-
-### Client API reference
-
-| Method | Returns | Notes |
-|--------|---------|-------|
-| `ctx.img_cache.lookup(url)` | `dict` or `None` | Checks by source URL |
-| `ctx.img_cache.store(url, bytes, client_name)` | metadata dict | Returns `content_hash` |
-| `ctx.img_cache.get_bytes(content_hash)` | `bytes` | Retrieve raw image |
-| `ctx.img_cache.similar(phash, max_hamming)` | list | Perceptual duplicate search |
-
-The imgcache performs perceptual deduplication — identical or near-identical images from different
-URLs will map to the same `content_hash`.
+Store the returned content hash in the scraper output rather than treating the source URL as a
+durable identifier.
 
 ---
 
-## VidCache — Video Files
+## VidCache / FileCache
 
-Only needed when the scraper collects video files. Pass `with_videos=True` to `build_context()`.
-Requires `pip install "dwilson-bot-scraper-lib[videos]"`.
+If you are scraping large media files, prefer the cache service APIs over bespoke local storage.
+For videos and generic files, use the appropriate scrape-stack client and keep target-site fetches
+behind request-auth permits.
 
-```python
-def cache_video(video_url: str, ctx) -> str:
-    """Download and cache a video. Returns content_hash."""
-    meta = ctx.vid_cache.lookup(video_url)
-    if meta:
-        return meta["content_hash"]
-    video_bytes = requests.get(video_url, timeout=60).content
-    result = ctx.vid_cache.store(video_url, video_bytes, ctx.client_name)
-    return result["content_hash"]
-```
-
-Store the returned `content_hash` in the record (e.g. as `video_content_hash`). Do not store
-the video URL as a durable reference — URLs break; the hash does not.
-
-### Client API reference
-
-| Method | Returns | Notes |
-|--------|---------|-------|
-| `ctx.vid_cache.lookup(url)` | `dict` or `None` | Checks by source URL |
-| `ctx.vid_cache.store(url, bytes, client_name)` | metadata dict | Returns `content_hash` |
-| `ctx.vid_cache.get_bytes(content_hash)` | `bytes` | Retrieve raw video |
-
-Use a longer `timeout` for video downloads — large files can take several seconds. Apply the
-same rate-limiting rules as image downloads: one at a time, no parallel fetches.
+For files that the cache service can download server-side, prefer that pattern. For direct client
+downloads, keep the fetch itself under `request_auth.acquire(domain)` and then upload/store the
+bytes through the relevant cache client after the permit is released.

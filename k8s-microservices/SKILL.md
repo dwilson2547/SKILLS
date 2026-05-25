@@ -1,12 +1,18 @@
 ---
-name: scrape-stack
-description: 'Deploy, update, or modify the scrape-stack system. Use when the user asks to update scrape-stack, change webcache/imgcache/filecache/vidcache/request-auth/browserless/cache-browser, add a new scrape-stack service, or change scrape-stack config.'
+name: k8s-microservices
+description: 'Deploy, update, or modify a self-contained multi-service Helm system (scrape-stack, gyopart, or similar). Use when the user asks to update scrape-stack, change webcache/imgcache/filecache/vidcache/request-auth/browserless/cache-browser, add a service to one of these systems, or work with a Helm chart that has its own repo and branch strategy.'
 ---
 
-# Scrape-Stack Deployment
+# Kubernetes Microservice Systems
 
-Scrape-stack is a self-contained multi-service scraping infrastructure system with its own Helm
-chart and branch-based prod/dev environments. All changes deploy via git push.
+Self-contained multi-service systems with their own Helm charts and branch-based prod/dev
+environments. All changes deploy via git push.
+
+Current systems: **scrape-stack**, **gyopart**. Future: DanWiki, Photo-Dump.
+
+---
+
+## Scrape-Stack
 
 **Repo:** `workspace/web_scrapers/scrape_stack/`
 **Helm chart:** `helm/scrape-stack/`
