@@ -50,6 +50,8 @@ FastAPI app with:
 - `/health` endpoint
 - `/docs` — auto-generated OpenAPI UI (FastAPI default)
 - A human-readable `/` root endpoint (HTML page) documenting the API with usage examples — this is the docs endpoint agents read
+- `GET /<resources>/export` — returns full dataset as JSON for migration
+- `POST /<resources>/import` — accepts JSON, supports `merge` (default) and `replace` modes
 
 Port is read from the environment:
 ```python
@@ -112,7 +114,8 @@ prints instructions to `source` the file.
 
 Create a Python CLI script at `SKILL/<service-name>/<cli-name>.py` that wraps the API.
 The CLI must read the API URL from `<SERVICE_NAME>_API_URL` env var, falling back to
-`http://localhost:<port>`.
+`http://localhost:<port>`. Include `export` and `import` subcommands that call the export/import
+endpoints — these are the primary migration path.
 
 ---
 
