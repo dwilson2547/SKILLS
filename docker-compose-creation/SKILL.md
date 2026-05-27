@@ -5,6 +5,8 @@ description: 'Create, fix, or improve docker-compose files. Use when writing a n
 
 # Docker Compose Creation
 
+**Docker registry endpoint is always Docker Hub.**
+
 A docker-compose stack is not complete until it has been brought up and all services confirmed healthy. Also generate a short README before finishing.
 
 ## Procedure

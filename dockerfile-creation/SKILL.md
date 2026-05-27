@@ -5,6 +5,8 @@ description: 'Create, fix, or improve Dockerfiles. Use when writing a new Docker
 
 # Dockerfile Creation
 
+**Docker registry endpoint is always Docker Hub.**
+
 A Dockerfile is not complete until it has been built and the resulting container verified to run correctly.
 
 ## Procedure
