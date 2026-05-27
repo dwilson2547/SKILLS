@@ -104,10 +104,7 @@ Check `imagePullPolicy` in the relevant values file if pods keep running the old
 
 ## DNS Changes
 
-Edit `cluster_config/dns/dns.yaml` (CoreDNS ConfigMap zone file), bump the serial number, commit and push. CoreDNS does not hot-reload ConfigMaps automatically — after ArgoCD syncs, run:
-```bash
-kubectl rollout restart deployment/coredns-local -n dns
-```
+Edit `cluster_config/dns/dns.yaml` (CoreDNS ConfigMap zone file), bump the serial number, commit and push. The `coredns-local` Deployment is annotated with `configmap.reloader.stakater.com/reload: coredns-local-config`, so Stakater Reloader should roll CoreDNS automatically when ArgoCD applies the updated ConfigMap. Only fall back to a manual `kubectl rollout restart deployment/coredns-local -n dns` if reloader is unavailable or the rollout does not happen.
 
 ---
 
