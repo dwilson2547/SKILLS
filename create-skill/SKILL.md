@@ -12,6 +12,7 @@ description: 'Create a new skill in the user''s SKILLS repo. Use when the user a
 3. Write the file using the template below
 4. Run `./install_skill_symlinks.sh` from the SKILLS repo root
 5. Commit in the SKILLS repo
+6. Push after commit
 
 ## SKILL.md Template
 
