@@ -5,7 +5,7 @@ description: 'Generate a structured showcase document from the current session c
 
 # Session Showcase
 
-Generates a polished `docs/session_showcase_<YYYY_MM>.md` document from the current session's
+Generates a polished `session_showcase_<YYYY_MM>.md` document from the current session's
 checkpoints and in-context history. The result is a task-by-task record of what was requested
 and what was delivered — suitable for sharing with teammates or stakeholders.
 
@@ -28,17 +28,17 @@ The session ID is in the `SESSION_CONTEXT` provided to you. Read:
 
 Also use the in-context session summary if one was injected at the start of the conversation.
 
-### 2. Determine the project root and docs path
+### 2. Determine the docs path
 
-Identify the project being worked on from the session folder and current working directory.
-Check whether `<project-root>/docs/` exists. Create it if missing. The output file goes at:
+All session showcases are saved to the central `cluster_config` repository regardless of
+which project was worked on during the session:
 
 ```
-<project-root>/docs/session_showcase_<YYYY_MM>.md
+/home/daniel/documents/workspace/cluster_config/docs/session_showcase_<YYYY_MM>.md
 ```
 
 Use the current month/year for the filename suffix (e.g. `session_showcase_2026_05.md`).
-If a file with that name already exists, append `_2` (or the next available suffix).
+If a file with that name already exists, append `_2`, `_3`, etc. (next available suffix).
 
 ### 3. Extract the narrative from checkpoints
 
@@ -128,7 +128,7 @@ someone who has never seen the repo. Mention the key technologies involved.>
 ### 5. Commit and push
 
 ```bash
-cd <project-root>
+cd /home/daniel/documents/workspace/cluster_config
 git add docs/session_showcase_<YYYY_MM>.md
 git commit -m "add session showcase document for <Month Year>
 
