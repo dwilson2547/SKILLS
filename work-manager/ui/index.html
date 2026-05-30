@@ -120,19 +120,28 @@
       <input type="text" x-model="briefLookupSlug" placeholder="TASK-001">
       <button class="btn-primary btn-sm" @click="loadBriefBySlug">Load brief</button>
     </div>
+    <div class="sidebar-top" x-show="activeSection === 'queue'">
+      <div class="filter-row">
+        <select x-model="queueStatusFilter" @change="fetchQueue"><option value="">In-progress &amp; ready</option><option value="in_progress">In progress</option><option value="draft">Draft</option><option value="blocked">Blocked</option></select>
+      </div>
+      <button class="btn-secondary btn-sm" @click="fetchQueue">Refresh</button>
+    </div>
+    <div class="sidebar-top" x-show="activeSection === 'tool_docs'">
+      <button class="btn-secondary btn-sm" @click="fetchToolDocs">Refresh</button>
+    </div>
 
     <div class="sidebar-list" x-show="activeSection === 'projects'">
       <template x-if="projects.length === 0"><div class="empty-list">No projects yet.</div></template>
       <template x-for="project in projects" :key="project.slug">
         <div>
-          <div class="tree-item" :class="{selected: selection.slug === project.slug}" @click="selection = {type:'project', slug: project.slug}; project.expanded = !project.expanded">
+          <div class="tree-item" :class="{selected: selection.slug === project.slug}" @click="selection = {type:'project', slug: project.slug}; project.expanded = !project.expanded; selectProject(project.slug); epicForm.project_slug = project.slug">
             <div class="item-title"><span x-text="project.title"></span></div>
             <div><span class="badge" :class="project.status" x-text="project.status"></span><span class="muted" x-text="project.slug"></span></div>
           </div>
           <div class="tree-children" x-show="project.expanded">
             <template x-for="epic in project.epics" :key="epic.slug">
               <div>
-                <div class="tree-item" :class="{selected: selection.slug === epic.slug}" @click="selection = {type:'epic', slug: epic.slug, project: project.slug}; epic.expanded = !epic.expanded">
+                <div class="tree-item" :class="{selected: selection.slug === epic.slug}" @click="selection = {type:'epic', slug: epic.slug, project: project.slug}; epic.expanded = !epic.expanded; selectEpic(epic.slug); taskForm.epic_slug = epic.slug">
                   <div class="item-title" x-text="epic.title"></div>
                   <div><span class="badge" :class="epic.status" x-text="epic.status"></span><span class="muted" x-text="epic.slug"></span></div>
                 </div>
@@ -203,6 +212,28 @@
       </template>
     </div>
 
+    <div class="sidebar-list" x-show="activeSection === 'queue'">
+      <template x-if="queueTasks.length === 0"><div class="empty-list">No active or ready tasks.</div></template>
+      <template x-for="t in queueTasks" :key="t.slug">
+        <div class="list-card" :class="{selected: selection.slug === t.slug}" @click="selectTask(t.slug)">
+          <div class="item-title" x-text="t.title"></div>
+          <div><span class="badge" :class="t.status" x-text="t.status"></span><span class="muted" x-text="t.slug"></span></div>
+          <div class="muted" x-show="t.assignee" x-text="'→ ' + t.assignee"></div>
+        </div>
+      </template>
+    </div>
+
+    <div class="sidebar-list" x-show="activeSection === 'tool_docs'">
+      <template x-if="toolDocs.length === 0"><div class="empty-list">No tool doc sources yet.</div></template>
+      <template x-for="d in toolDocs" :key="d.slug">
+        <div class="list-card" :class="{selected: selection.slug === d.slug}" @click="selection = {type:'tool_doc', slug: d.slug}; toolDocForm = {title: d.title, repo_url: d.repo_url, tagsText: (d.tags||[]).join(', ')}">
+          <div class="item-title" x-text="d.title"></div>
+          <div class="muted" x-text="d.slug"></div>
+          <div class="muted" x-text="d.repo_url"></div>
+        </div>
+      </template>
+    </div>
+
     <div class="sidebar-list" x-show="activeSection === 'briefs'">
       <template x-if="selectedBrief && selectedBrief.task">
         <div class="list-card selected">
@@ -248,22 +279,60 @@
           <div class="editor-actions"><button class="btn-primary" @click="createSubtask">Create subtask</button></div>
         </div>
       </div>
-      <div class="panel" x-show="selectedBrief && selectedTaskSlug">
-        <h2>Brief Viewer</h2>
-        <div class="danger-box" x-show="(selectedBrief?.completion_blockers || []).length">
-          <strong>Completion blockers</strong>
-          <ul><template x-for="blocker in (selectedBrief?.completion_blockers || [])" :key="blocker"><li x-text="blocker"></li></template></ul>
+      <div class="panel" x-show="selection.type === 'project' && projectDetail">
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <h2 x-text="projectDetail?.title" style="margin:0;flex:1;min-width:0"></h2>
+          <select :value="projectDetail?.status" @change="updateProjectStatus($event.target.value)" style="font-size:.85rem;padding:.3rem .6rem">
+            <option>draft</option><option>in_progress</option><option>blocked</option><option>complete</option><option>abandoned</option>
+          </select>
         </div>
-        <div class="markdown" x-html="briefHtml"></div>
+        <div class="field" style="margin-bottom:.75rem"><span class="field-label">Goal</span><textarea x-model="projectEditForm.goal" style="min-height:60px"></textarea></div>
+        <div class="field" style="margin-bottom:.75rem"><span class="field-label">Description</span><textarea x-model="projectEditForm.description"></textarea></div>
+        <div class="field" style="margin-bottom:.75rem"><span class="field-label">Tags (comma-separated)</span><input type="text" x-model="projectEditForm.tagsText"></div>
+        <div class="field" x-show="projectDetail?.status === 'blocked'" style="margin-bottom:.75rem"><span class="field-label">Blocked reason</span><input type="text" x-model="projectEditForm.blocked_reason"></div>
+        <div class="editor-actions"><button class="btn-primary" @click="saveProjectEdit">Save project</button></div>
       </div>
-      <div class="panel" x-show="selection.type === 'task' && taskDetail.task" style="margin-top:1rem">
+
+      <div class="panel" x-show="selection.type === 'epic' && epicDetail.epic">
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <h2 x-text="epicDetail.epic?.title" style="margin:0;flex:1;min-width:0"></h2>
+          <select :value="epicDetail.epic?.status" @change="updateEpicStatus($event.target.value)" style="font-size:.85rem;padding:.3rem .6rem">
+            <option>draft</option><option>in_progress</option><option>blocked</option><option>complete</option><option>abandoned</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:.75rem"><span class="field-label">Description</span><textarea x-model="epicEditForm.description"></textarea></div>
+        <div class="field" style="margin-bottom:.75rem"><span class="field-label">Tags (comma-separated)</span><input type="text" x-model="epicEditForm.tagsText"></div>
+        <div class="field" x-show="epicDetail.epic?.status === 'blocked'" style="margin-bottom:.75rem"><span class="field-label">Blocked reason</span><input type="text" x-model="epicEditForm.blocked_reason"></div>
+        <div class="editor-actions" style="margin-bottom:1rem"><button class="btn-primary" @click="saveEpicEdit">Save epic</button></div>
+        <h3 style="margin-bottom:.5rem">Linked Design Docs</h3>
+        <template x-if="epicDetail.designDocs.length === 0"><p class="muted" style="font-size:.85rem">No design docs linked.</p></template>
+        <template x-for="doc in epicDetail.designDocs" :key="doc.slug">
+          <div class="list-card" style="margin-bottom:.3rem"><div class="item-title" x-text="doc.title"></div><div class="muted" x-text="doc.slug"></div></div>
+        </template>
+      </div>
+      <div class="panel" x-show="selection.type === 'task' && taskDetail.task">
         <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem;flex-wrap:wrap">
           <h2 x-text="taskDetail.task?.title" style="margin:0;flex:1;min-width:0"></h2>
           <select :value="taskDetail.task?.status" @change="updateTaskStatus($event.target.value)" style="font-size:.85rem;padding:.3rem .6rem">
-            <option>draft</option><option>ready</option><option>in_progress</option><option>review</option><option>complete</option><option>blocked</option>
+            <option>draft</option><option>ready</option><option>in_progress</option><option>in_review</option><option>complete</option><option>blocked</option><option>abandoned</option>
           </select>
           <button class="btn-secondary btn-sm" @click="activeSection='briefs'; selectedTaskSlug=selection.slug; loadBriefBySlug(selection.slug)">View Brief</button>
         </div>
+
+        <details style="margin-bottom:1.5rem">
+          <summary style="cursor:pointer;font-weight:600;font-size:.9rem;margin-bottom:.5rem">Edit Task Fields</summary>
+          <div style="margin-top:.75rem;display:flex;flex-direction:column;gap:.6rem">
+            <div class="field"><span class="field-label">Title</span><input type="text" x-model="taskEditForm.title"></div>
+            <div class="field"><span class="field-label">Description</span><textarea x-model="taskEditForm.description" style="min-height:80px"></textarea></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+              <div class="field"><span class="field-label">Assignee</span><input type="text" x-model="taskEditForm.assignee"></div>
+              <div class="field"><span class="field-label">Effort</span><select x-model="taskEditForm.estimated_effort"><option value="">--</option><option>xs</option><option>s</option><option>m</option><option>l</option><option>xl</option></select></div>
+            </div>
+            <div class="field"><span class="field-label">Tags (comma-separated, for note matching)</span><input type="text" x-model="taskEditForm.tagsText"></div>
+            <div class="field" x-show="taskDetail.task?.status === 'blocked'"><span class="field-label">Blocked reason</span><input type="text" x-model="taskEditForm.blocked_reason"></div>
+            <div class="editor-actions"><button class="btn-primary" @click="saveTaskEdit">Save changes</button></div>
+          </div>
+        </details>
 
         <div style="margin-bottom:1.5rem">
           <h3 style="margin-bottom:.5rem">Acceptance Criteria</h3>
@@ -301,12 +370,44 @@
           </div>
         </div>
 
-        <div>
+        <div style="margin-bottom:1.5rem">
           <h3 style="margin-bottom:.5rem">Definition of Done</h3>
           <textarea x-model="taskDetail.dod.dod_description" placeholder="Describe what 'done' means for this task…" style="min-height:100px"></textarea>
           <div class="editor-actions" style="margin-top:.5rem"><button class="btn-primary" @click="saveDoD">Save DoD</button></div>
         </div>
+
+        <div x-show="taskIssues.length > 0">
+          <h3 style="margin-bottom:.5rem">Linked Issues</h3>
+          <template x-for="issue in taskIssues" :key="issue.slug">
+            <div class="list-card" style="margin-bottom:.3rem" @click="activeSection='issues'; selection={type:'issue',slug:issue.slug}; issueForm={...issue,task_slug:issue.linked_task_slug||''}">
+              <div style="display:flex;align-items:center;gap:.5rem">
+                <span class="badge" :class="issue.severity" x-text="issue.severity"></span>
+                <span class="badge" :class="issue.status" x-text="issue.status"></span>
+                <span class="item-title" style="margin:0" x-text="issue.title"></span>
+              </div>
+            </div>
+          </template>
+        </div>
       </div>
+    </div>
+
+    <div class="main-content" x-show="activeSection === 'queue'">
+      <div class="panel" x-show="queueTasks.length > 0 || selection.type === 'task'">
+        <h2>Work Queue</h2>
+        <p class="muted" style="font-size:.85rem;margin-bottom:1rem">Tasks that are in-progress or ready to start, across all projects.</p>
+        <template x-for="t in queueTasks" :key="t.slug">
+          <div class="list-card" :class="{selected: selection.slug === t.slug}" @click="selectTask(t.slug); activeSection='projects'" style="margin-bottom:.5rem">
+            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+              <span class="badge" :class="t.status" x-text="t.status"></span>
+              <span class="item-title" style="margin:0;flex:1" x-text="t.title"></span>
+              <span class="muted" x-text="t.slug"></span>
+            </div>
+            <div class="muted" x-show="t.assignee" x-text="'Assignee: ' + t.assignee"></div>
+            <div class="muted" x-show="t.estimated_effort" x-text="'Effort: ' + t.estimated_effort"></div>
+          </div>
+        </template>
+      </div>
+      <div class="empty-state panel" x-show="queueTasks.length === 0">No tasks match the current filter. All caught up!</div>
     </div>
 
     <div class="main-content" x-show="activeSection === 'notes'">
@@ -318,7 +419,7 @@
         <div class="warning" x-show="!noteHasScopeTag()">At least one tag must start with <code>scope:</code>.</div>
         <div class="editor-actions">
           <button class="btn-primary" @click="saveNote" :disabled="!noteHasScopeTag()">Save note</button>
-          <button class="btn-warning" x-show="selection.type === 'note'" @click="archiveSelectedNote">Archive</button>
+          <button class="btn-warning" x-show="selection.type === 'note'" @click="archiveSelectedNote">Archive note</button>
           <button class="btn-secondary" @click="resetNoteForm">New note</button>
         </div>
       </div>
@@ -374,7 +475,7 @@
         <div class="field"><span class="field-label">Lessons learned</span><textarea x-model="issueForm.lessons_learned"></textarea></div>
         <div class="editor-actions">
           <button class="btn-primary" @click="saveIssue">Save issue</button>
-          <button class="btn-warning" x-show="selection.type === 'issue'" @click="resolveSelectedIssue">Resolve</button>
+          <button class="btn-warning" x-show="selection.type === 'issue'" @click="resolveSelectedIssue">Resolve issue</button>
           <button class="btn-secondary" @click="resetIssueForm">New issue</button>
         </div>
       </div>
@@ -403,6 +504,35 @@
       </div>
     </div>
 
+    <div class="main-content" x-show="activeSection === 'tool_docs'">
+      <div class="panel">
+        <h2>Add Tool Doc Source</h2>
+        <p class="muted" style="font-size:.85rem;margin-bottom:.75rem">Add a GitHub repository to index as tool documentation. Content will be chunked and made available for agent briefs.</p>
+        <div class="field"><span class="field-label">Title</span><input type="text" x-model="toolDocForm.title" placeholder="My Tool Docs"></div>
+        <div class="field"><span class="field-label">Repository URL</span><input type="url" x-model="toolDocForm.repo_url" placeholder="https://github.com/owner/repo"></div>
+        <div class="field"><span class="field-label">Tags (comma-separated)</span><input type="text" x-model="toolDocForm.tagsText"></div>
+        <div class="editor-actions"><button class="btn-primary" @click="saveToolDoc">Add &amp; index</button></div>
+      </div>
+      <template x-if="toolDocs.length > 0">
+        <div class="panel">
+          <h2>Indexed Sources</h2>
+          <template x-for="d in toolDocs" :key="d.slug">
+            <div class="list-card" style="margin-bottom:.4rem">
+              <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+                <div style="flex:1;min-width:0">
+                  <div class="item-title" x-text="d.title"></div>
+                  <div class="muted" x-text="d.repo_url"></div>
+                  <div class="muted" x-text="d.slug"></div>
+                </div>
+                <button class="btn-secondary btn-sm" @click="reindexToolDoc(d.slug)" title="Re-index">↻ Reindex</button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+
+
     <div class="main-content" x-show="activeSection === 'briefs'">
       <div class="panel" x-show="selectedBrief">
         <h2>Task Brief</h2>
@@ -422,16 +552,25 @@ function app() {
   return {
     sections: [
       { key: 'projects', label: 'Projects' },
+      { key: 'queue', label: 'Queue' },
       { key: 'notes', label: 'Notes' },
       { key: 'design_docs', label: 'Design Docs' },
       { key: 'issues', label: 'Issues' },
       { key: 'runbooks', label: 'Runbooks' },
+      { key: 'tool_docs', label: 'Tool Docs' },
       { key: 'briefs', label: 'Brief Viewer' },
     ],
     activeSection: 'projects', error: null, toast: null,
     projects: [], notes: [], noteTags: [], designDocs: [], selectedDocChunks: [], issues: [], runbooks: [],
+    queueTasks: [], queueStatusFilter: '', toolDocs: [],
     selectedTaskSlug: '', selectedBrief: null, briefHtml: '', briefLookupSlug: '', selection: {},
     taskDetail: { task: null, criteria: [], testingLayers: [], dod: { dod_description: '', checklist: [] } },
+    taskEditForm: { title: '', description: '', assignee: '', estimated_effort: '', tagsText: '', blocked_reason: '' },
+    taskIssues: [],
+    epicDetail: { epic: null, designDocs: [] },
+    epicEditForm: { title: '', description: '', tagsText: '', blocked_reason: '' },
+    projectDetail: null,
+    projectEditForm: { goal: '', description: '', tagsText: '', blocked_reason: '' },
     newCriterion: '',
     newTestingLayer: { layer: 'unit', description: '' },
     noteSearch: '', noteSearchMode: 'text', noteFilterTag: '', showArchivedNotes: false,
@@ -445,8 +584,9 @@ function app() {
     designDocLink: { epic_slug: '', design_doc_id: '' },
     issueForm: { title: '', severity: 'sev2', task_slug: '', triage_steps: '', root_cause: '', resolution: '', lessons_learned: '' },
     runbookForm: { title: '', service: '', category: '', status: 'draft', symptoms: '', prerequisites: '', steps: '', verification: '', escalation: '', linked_issue_ids_text: '' },
+    toolDocForm: { title: '', repo_url: '', tagsText: '' },
 
-    async init() { await Promise.all([this.refreshProjects(), this.fetchNotes(), this.fetchDesignDocs(), this.fetchIssues(), this.fetchRunbooks()]); },
+    async init() { await Promise.all([this.refreshProjects(), this.fetchNotes(), this.fetchDesignDocs(), this.fetchIssues(), this.fetchRunbooks(), this.fetchQueue(), this.fetchToolDocs()]); },
     async api(path, options = {}) {
       const response = await fetch(`/api${path}`, { headers: { 'Content-Type': 'application/json' }, ...options });
       const isJson = response.headers.get('content-type')?.includes('application/json');
@@ -489,18 +629,46 @@ function app() {
     },
     async selectTask(slug) {
       this.selection = { type: 'task', slug };
+      this.subtaskForm.task_slug = slug;
       this.taskDetail = { task: null, criteria: [], testingLayers: [], dod: { dod_description: '', checklist: [] } };
+      this.taskIssues = [];
       await this.loadTaskDetail(slug);
     },
     async loadTaskDetail(slug) {
       try {
-        const [task, criteria, testingLayers, dod] = await Promise.all([
+        const [task, criteria, testingLayers, dod, issues] = await Promise.all([
           this.api(`/tasks/${slug}`),
           this.api(`/tasks/${slug}/acceptance-criteria`),
           this.api(`/tasks/${slug}/testing-layers`),
           this.api(`/tasks/${slug}/dod`),
+          this.api(`/issues?task=${slug}`),
         ]);
         this.taskDetail = { task, criteria, testingLayers, dod: { dod_description: dod.dod_description || '', checklist: dod.checklist || [] } };
+        this.taskEditForm = {
+          title: task.title || '',
+          description: task.description || '',
+          assignee: task.assignee || '',
+          estimated_effort: task.estimated_effort || '',
+          tagsText: (task.tags || []).join(', '),
+          blocked_reason: task.blocked_reason || '',
+        };
+        this.taskIssues = issues;
+      } catch (error) { this.handleError(error); }
+    },
+    async saveTaskEdit() {
+      const payload = {
+        title: this.taskEditForm.title || undefined,
+        description: this.taskEditForm.description || undefined,
+        assignee: this.taskEditForm.assignee || null,
+        estimated_effort: this.taskEditForm.estimated_effort || null,
+        tags: this.tagsTextToArray(this.taskEditForm.tagsText),
+        blocked_reason: this.taskEditForm.blocked_reason || null,
+      };
+      try {
+        const task = await this.api(`/tasks/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
+        this.taskDetail.task = task;
+        await this.refreshProjects();
+        this.notify('Task saved');
       } catch (error) { this.handleError(error); }
     },
     async addCriterion() {
@@ -588,6 +756,7 @@ function app() {
     },
     async archiveSelectedNote() {
       if (this.selection.type !== 'note') return;
+      if (!confirm('Archive this note? It will be hidden from normal searches but remains queryable.')) return;
       try { await this.api(`/notes/${this.selection.slug}/archive`, { method: 'POST' }); this.resetNoteForm(); await this.fetchNotes(); this.notify('Note archived'); } catch (error) { this.handleError(error); }
     },
 
@@ -645,6 +814,7 @@ function app() {
     },
     async resolveSelectedIssue() {
       if (this.selection.type !== 'issue') return;
+      if (!confirm('Mark this issue as resolved? All sections (triage, root cause, resolution, lessons learned) must be filled.')) return;
       try { await this.api(`/issues/${this.selection.slug}/resolve`, { method: 'POST' }); await this.fetchIssues(); this.notify('Issue resolved'); } catch (error) { this.handleError(error); }
     },
 
@@ -673,6 +843,112 @@ function app() {
     async validateSelectedRunbook() {
       if (this.selection.type !== 'runbook') return;
       try { await this.api(`/runbooks/${this.selection.slug}/validate`, { method: 'POST' }); await this.fetchRunbooks(); this.notify('Runbook validated'); } catch (error) { this.handleError(error); }
+    },
+
+    async selectProject(slug) {
+      try {
+        this.projectDetail = await this.api(`/projects/${slug}`);
+        this.projectEditForm = {
+          goal: this.projectDetail.goal || '',
+          description: this.projectDetail.description || '',
+          tagsText: (this.projectDetail.tags || []).join(', '),
+          blocked_reason: this.projectDetail.blocked_reason || '',
+        };
+      } catch (error) { this.handleError(error); }
+    },
+    async updateProjectStatus(status) {
+      try {
+        this.projectDetail = await this.api(`/projects/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+        await this.refreshProjects();
+      } catch (error) { this.handleError(error); }
+    },
+    async saveProjectEdit() {
+      const payload = {
+        goal: this.projectEditForm.goal || undefined,
+        description: this.projectEditForm.description || undefined,
+        tags: this.tagsTextToArray(this.projectEditForm.tagsText),
+        blocked_reason: this.projectEditForm.blocked_reason || null,
+      };
+      try {
+        this.projectDetail = await this.api(`/projects/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
+        await this.refreshProjects();
+        this.notify('Project saved');
+      } catch (error) { this.handleError(error); }
+    },
+
+    async selectEpic(slug) {
+      try {
+        const [epic, designDocs] = await Promise.all([
+          this.api(`/epics/${slug}`),
+          this.api(`/epics/${slug}/design-docs`),
+        ]);
+        this.epicDetail = { epic, designDocs };
+        this.epicEditForm = {
+          title: epic.title || '',
+          description: epic.description || '',
+          tagsText: (epic.tags || []).join(', '),
+          blocked_reason: epic.blocked_reason || '',
+        };
+      } catch (error) { this.handleError(error); }
+    },
+    async updateEpicStatus(status) {
+      try {
+        const epic = await this.api(`/epics/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+        this.epicDetail.epic = epic;
+        await this.refreshProjects();
+      } catch (error) { this.handleError(error); }
+    },
+    async saveEpicEdit() {
+      const payload = {
+        title: this.epicEditForm.title || undefined,
+        description: this.epicEditForm.description || undefined,
+        tags: this.tagsTextToArray(this.epicEditForm.tagsText),
+        blocked_reason: this.epicEditForm.blocked_reason || null,
+      };
+      try {
+        const epic = await this.api(`/epics/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
+        this.epicDetail.epic = epic;
+        await this.refreshProjects();
+        this.notify('Epic saved');
+      } catch (error) { this.handleError(error); }
+    },
+
+    async fetchQueue() {
+      try {
+        const params = new URLSearchParams();
+        if (this.queueStatusFilter) {
+          params.set('status', this.queueStatusFilter);
+        }
+        const all = this.queueStatusFilter
+          ? await this.api(`/tasks?${params}`)
+          : await Promise.all([
+              this.api('/tasks?status=in_progress'),
+              this.api('/tasks?status=ready'),
+              this.api('/tasks?status=draft'),
+            ]).then(([a, b, c]) => [...a, ...b, ...c]);
+        this.queueTasks = all;
+      } catch (error) { this.handleError(error); }
+    },
+
+    async fetchToolDocs() {
+      try { this.toolDocs = await this.api('/tool-docs'); } catch (error) { this.handleError(error); }
+    },
+    async saveToolDoc() {
+      if (!this.toolDocForm.title || !this.toolDocForm.repo_url) { this.error = 'Title and repository URL are required.'; return; }
+      const payload = { title: this.toolDocForm.title, repo_url: this.toolDocForm.repo_url, tags: this.tagsTextToArray(this.toolDocForm.tagsText) };
+      try {
+        await this.api('/tool-docs', { method: 'POST', body: JSON.stringify(payload) });
+        this.toolDocForm = { title: '', repo_url: '', tagsText: '' };
+        await this.fetchToolDocs();
+        this.notify('Tool doc source added and indexed');
+      } catch (error) { this.handleError(error); }
+    },
+    async reindexToolDoc(slug) {
+      try {
+        await this.api(`/tool-docs/${slug}/reindex`, { method: 'POST' });
+        await this.fetchToolDocs();
+        this.notify('Reindex complete');
+      } catch (error) { this.handleError(error); }
     },
   };
 }
