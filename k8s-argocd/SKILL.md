@@ -85,6 +85,17 @@ Git push alone is not enough for these files.
 4. Create namespace and apply secrets if needed
 5. Push to `main` for all subsequent changes
 
+## Deploying a New Service (complete these steps as applicable)
+
+When deploying a new service, complete each of the following steps **only if applicable**, but do not skip them when they apply — do not stop after the pod is running:
+
+1. **Enable ingress** — only if the service exposes an HTTP endpoint that should be reachable on the local network. Set `ingress.enabled: true` and pick a hostname like `<service>.<system>.local`.
+2. **Add DNS** — only if ingress was enabled (or a LoadBalancer IP was assigned). Add an A record to the appropriate zone file in `cluster_config/dns/dns.yaml`, bump the serial, commit and push.
+3. **Add homepage entry** — only if the service has a UI or a browsable endpoint (Swagger docs, dashboards, etc). Add to the relevant group in `cluster_config/homepage/homepage.yaml`, or create a new group if there isn't one yet.
+4. **Update the changelog** — **always required** when any change is made to `cluster_config`. Update `cluster_config/CHANGELOG.md` with a dated entry describing what was added, changed, or fixed. The changelog is non-negotiable — no cluster_config commit should go out without it.
+
+After pushing both repos, refresh the relevant ArgoCD apps and verify each change took effect.
+
 ---
 
 ## Docker Images (gyopart services)
@@ -130,3 +141,27 @@ Edit `cluster_config/dns/dns.yaml` (CoreDNS ConfigMap zone file), bump the seria
 - ArgoCD Application manifests (`argocd/*.yaml`) require both a git push AND a manual `kubectl apply`
 - The `kubernetes/` directory in cluster_config is legacy/archive — not actively synced by ArgoCD
 - Do not run `kubectl apply` against the gyopart Helm chart — ArgoCD owns it
+
+---
+
+## Documentation Closure
+
+Before declaring the task complete, scan the work you just did for anything worth capturing.
+
+**Issue docs** — create `docs/issues/YYYY_MM_DD_<slug>.md` in the project repo for:
+- Any pod/service that entered CrashLoopBackOff or failed to start
+- Any dependency, permission, or configuration that wasn't obvious from the code
+- Any step you had to retry or that failed with an error before succeeding
+- Any behavior that contradicted what the docs or code implied
+
+**Patterns docs** — add a section to `docs/<technology>_patterns.md` (create if absent) for:
+- Any non-obvious solution that would save time next time
+- Any version constraint, API contract, or framework gotcha that bit you
+
+**Notes** — for any new or updated doc, add or update a note pointing to it:
+```bash
+notes add "title" "2-5 sentence summary. See: docs/<file>.md" --tags technology,project
+```
+
+**Skip this step only if** the work was a purely mechanical change — single-value config edits,
+no debugging, no retries, no surprises. If anything went wrong, even briefly, document it.

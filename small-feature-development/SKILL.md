@@ -55,3 +55,24 @@ the next agent reads the files directly.
 - Write code immediately — do not stage it in notes, context store, or handoff docs
 - If you realize mid-task the scope is larger than expected, stop, tell the user, and suggest switching to brainstorming
 - Context store and notes are for discoveries and findings, never for code or file contents
+
+---
+
+## Documentation Closure
+
+Before declaring the task complete, scan the work you just did for anything worth capturing.
+
+**Issue docs** — create `docs/issues/YYYY_MM_DD_<slug>.md` in the project repo for:
+- Any error that required non-obvious debugging to resolve
+- Any dependency, config, or integration behavior that wasn't clear from the code
+- Any step you had to retry or that failed before succeeding
+
+**Patterns docs** — add a section to `docs/<technology>_patterns.md` (create if absent) for:
+- Any pattern or fix that would save time on the next similar task
+
+**Notes** — for any new or updated doc, add or update a note pointing to it:
+```bash
+notes add "title" "2-5 sentence summary. See: docs/<file>.md" --tags technology,project
+```
+
+**Skip this step only if** the change was a single focused edit with no debugging or surprises.

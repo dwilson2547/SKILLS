@@ -97,3 +97,25 @@ Only declare the UI complete when every workflow on the approved list has passed
 - If Playwright verification is ambiguous or blocked, ask the user — do not resolve it unilaterally
 - Do not ship placeholder data, stub interactions, or console.log-driven "verification"
 - Framework agnostic — follow whatever stack is already in use; for greenfield, ask the user
+
+---
+
+## Documentation Closure
+
+Before declaring the task complete, scan the work you just did for anything worth capturing.
+
+**Issue docs** — create `docs/issues/YYYY_MM_DD_<slug>.md` in the project repo for:
+- Any build error, peer dep conflict, or missing package that wasn't obvious upfront
+- Any framework/library behavior that contradicted documentation or expectations
+- Any step you had to retry or that failed before succeeding
+
+**Patterns docs** — add a section to `docs/<technology>_patterns.md` (create if absent) for:
+- Any version constraint or peer dep incompatibility that bit you
+- Any non-obvious framework or library pattern discovered during implementation
+
+**Notes** — for any new or updated doc, add or update a note pointing to it:
+```bash
+notes add "title" "2-5 sentence summary. See: docs/<file>.md" --tags technology,project
+```
+
+**Skip this step only if** the change was purely mechanical with no debugging or surprises.

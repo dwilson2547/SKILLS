@@ -176,3 +176,24 @@ git commit -m "feat: add <service-name> ai service"
 - The service must work with plain `docker compose up` — no external dependencies beyond what's in the compose file
 - The CLI must be the primary agent interface; curl fallbacks are for emergencies only
 - Always commit to the SKILLS repo, never to the project repo
+
+---
+
+## Documentation Closure
+
+Before declaring the task complete, scan the work you just did for anything worth capturing.
+
+**Issue docs** — create `docs/issues/YYYY_MM_DD_<slug>.md` in the relevant repo for:
+- Any dependency, configuration, or integration behavior that wasn't obvious upfront
+- Any Docker, FastAPI, or SQLite behavior that contradicted expectations
+- Any step you had to retry or that failed before succeeding
+
+**Patterns docs** — add a section to `docs/<technology>_patterns.md` (create if absent) for:
+- Any pattern or gotcha that future service authors should know
+
+**Notes** — for any new or updated doc, add or update a note pointing to it:
+```bash
+notes add "title" "2-5 sentence summary. See: docs/<file>.md" --tags technology,project
+```
+
+**Skip this step only if** the build went completely smoothly with no errors or surprises.
