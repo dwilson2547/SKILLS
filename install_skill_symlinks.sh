@@ -106,6 +106,9 @@ main() {
   if [[ -d "${SCRIPT_DIR}/todo-store" ]]; then
     skill_targets["todo-store"]="$(resolve_todo_store_target)"
   fi
+  if [[ -d "${SCRIPT_DIR}/work-manager" ]]; then
+    skill_targets["work-manager"]="${SCRIPT_DIR}/work-manager/SKILL/work-manager"
+  fi
 
   for skill_name in $(printf '%s\n' "${!skill_targets[@]}" | sort); do
     target="${skill_targets[$skill_name]}"

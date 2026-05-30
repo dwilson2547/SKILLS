@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Work Manager</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --sidebar-bg: #f8f9fa; --border: #e5e7eb;
+    --text: #111827; --text-muted: #6b7280; --accent: #2563eb; --accent-hover: #1d4ed8;
+    --danger: #dc2626; --tag-bg: #dbeafe; --tag-text: #1e40af; --archived-bg: #fef9c3;
+    --archived-text: #854d0e; --card-hover: #f0f4ff; --card-selected: #eff6ff;
+    --success-bg: #dcfce7; --success-text: #166534; --warning-bg: #fef3c7; --warning-text: #92400e;
+  }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  nav { display: flex; align-items: center; justify-content: space-between; padding: .6rem 1.2rem; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; gap: .75rem; }
+  nav .brand { font-weight: 700; font-size: 1.05rem; color: var(--accent); white-space: nowrap; }
+  nav .nav-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+  nav .count { font-size: .8rem; color: var(--text-muted); }
+  .layout { display: flex; flex: 1; overflow: hidden; }
+  .sidebar { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--sidebar-bg); border-right: 1px solid var(--border); overflow: hidden; }
+  .sidebar-top { padding: .75rem; display: flex; flex-direction: column; gap: .5rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .search-row, .filter-row { display: flex; gap: .4rem; }
+  .sidebar-list { flex: 1; overflow-y: auto; padding: .4rem; }
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .main-content { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+  .empty-state, .empty-list { text-align: center; padding: 2rem 1rem; color: var(--text-muted); font-size: .85rem; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .panel h2, .panel h3 { margin-bottom: .75rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+  .tree-item, .list-card { padding: .65rem .75rem; border-radius: 6px; cursor: pointer; margin-bottom: .3rem; border: 1px solid transparent; transition: background .12s, border-color .12s; background: var(--surface); }
+  .tree-item:hover, .list-card:hover { background: var(--card-hover); border-color: var(--border); }
+  .selected { background: var(--card-selected); border-color: var(--accent); }
+  .tree-children { margin-left: 1rem; border-left: 1px dashed var(--border); padding-left: .6rem; }
+  .item-title { font-weight: 600; font-size: .9rem; margin-bottom: .25rem; }
+  .muted { color: var(--text-muted); font-size: .8rem; }
+  .badge { display: inline-flex; padding: 0 8px; border-radius: 999px; font-size: .72rem; background: var(--tag-bg); color: var(--tag-text); margin-right: .25rem; }
+  .badge.complete { background: var(--success-bg); color: var(--success-text); }
+  .badge.blocked, .badge.sev1 { background: #fee2e2; color: #991b1b; }
+  .badge.in_progress, .badge.in_review, .badge.sev2 { background: var(--warning-bg); color: var(--warning-text); }
+  .badge.abandoned, .badge.sev3 { background: #e5e7eb; color: #374151; }
+  .tag { padding: 0 6px; border-radius: 999px; font-size: .7rem; background: var(--tag-bg); color: var(--tag-text); }
+  .tag-chip { cursor: pointer; padding: 1px 8px; border-radius: 999px; font-size: .75rem; background: var(--border); color: var(--text-muted); border: 1px solid transparent; }
+  .tag-chip.active { background: var(--tag-bg); color: var(--tag-text); border-color: var(--accent); }
+  .tag-cloud, .row-wrap { display: flex; flex-wrap: wrap; gap: .3rem; }
+  input[type="text"], input[type="search"], input[type="url"], select, textarea { width: 100%; padding: .45rem .65rem; border: 1px solid var(--border); border-radius: 5px; font-size: .88rem; font-family: inherit; background: var(--surface); color: var(--text); outline: none; transition: border-color .15s; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 120px; font-size: .85rem; line-height: 1.5; }
+  button { cursor: pointer; border: none; border-radius: 5px; padding: .4rem .85rem; font-size: .85rem; font-family: inherit; font-weight: 500; transition: all .15s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary { background: var(--border); color: var(--text); }
+  .btn-secondary:hover { background: #d1d5db; }
+  .btn-danger { background: #fee2e2; color: var(--danger); }
+  .btn-warning { background: var(--warning-bg); color: var(--warning-text); }
+  .btn-sm { padding: .3rem .65rem; font-size: .8rem; }
+  .field { display: flex; flex-direction: column; gap: .3rem; }
+  .field-label { font-size: .82rem; font-weight: 600; color: var(--text-muted); }
+  .editor-actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+  .error-banner { background: #fee2e2; color: #991b1b; padding: .5rem 1rem; font-size: .85rem; border-bottom: 1px solid #fecaca; display: flex; justify-content: space-between; align-items: center; }
+  .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: #1e293b; color: #fff; padding: .6rem 1.1rem; border-radius: 6px; font-size: .85rem; z-index: 100; }
+  .warning { background: var(--warning-bg); color: var(--warning-text); padding: .75rem; border-radius: 6px; border: 1px solid #fde68a; }
+  .danger-box { background: #fee2e2; color: #991b1b; padding: .75rem; border-radius: 6px; border: 1px solid #fecaca; }
+  .markdown { line-height: 1.6; }
+  .markdown h1, .markdown h2, .markdown h3 { margin: 1rem 0 .5rem; }
+  .markdown ul { padding-left: 1.2rem; }
+  .markdown pre { background: #f9fafb; border: 1px solid var(--border); border-radius: 6px; padding: .75rem; white-space: pre-wrap; }
+</style>
+</head>
+<body x-data="app()" x-init="init()">
+<div x-show="error" class="error-banner" x-cloak>
+  <span x-text="error"></span>
+  <button @click="error=null" class="btn-secondary btn-sm">✕</button>
+</div>
+<nav>
+  <span class="brand">🧰 Work Manager</span>
+  <span class="nav-actions">
+    <template x-for="section in sections" :key="section.key">
+      <button class="btn-secondary btn-sm" :class="{'btn-primary': activeSection === section.key}" @click="activeSection = section.key" x-text="section.label"></button>
+    </template>
+    <span class="count" x-text="selectedTaskSlug ? ('Selected: ' + selectedTaskSlug) : 'Ready'"></span>
+  </span>
+</nav>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-top" x-show="activeSection === 'projects'">
+      <button class="btn-primary btn-sm" @click="refreshProjects">Refresh hierarchy</button>
+      <div class="muted">Project → Epic → Task → Subtask</div>
+    </div>
+    <div class="sidebar-top" x-show="activeSection === 'notes'">
+      <div class="search-row">
+        <input type="search" x-model="noteSearch" @input.debounce.300ms="fetchNotes" placeholder="Search notes…">
+        <select x-model="noteSearchMode" @change="fetchNotes"><option value="text">Text</option><option value="semantic">Semantic</option></select>
+      </div>
+      <div class="tag-cloud">
+        <template x-for="tag in noteTags" :key="tag"><span class="tag-chip" :class="{active: noteFilterTag === tag}" @click="noteFilterTag = noteFilterTag === tag ? '' : tag; fetchNotes()" x-text="tag"></span></template>
+      </div>
+      <label class="muted"><input type="checkbox" x-model="showArchivedNotes" @change="fetchNotes"> Show archived</label>
+    </div>
+    <div class="sidebar-top" x-show="activeSection === 'design_docs'">
+      <button class="btn-primary btn-sm" @click="fetchDesignDocs">Refresh docs</button>
+    </div>
+    <div class="sidebar-top" x-show="activeSection === 'issues'">
+      <div class="filter-row">
+        <select x-model="issueStatus" @change="fetchIssues"><option value="">All status</option><option value="open">Open</option><option value="resolved">Resolved</option></select>
+        <select x-model="issueSeverity" @change="fetchIssues"><option value="">All severity</option><option value="sev1">sev1</option><option value="sev2">sev2</option><option value="sev3">sev3</option></select>
+      </div>
+    </div>
+    <div class="sidebar-top" x-show="activeSection === 'runbooks'">
+      <div class="filter-row">
+        <input type="text" x-model="runbookService" @input.debounce.300ms="fetchRunbooks" placeholder="Service">
+        <input type="text" x-model="runbookCategory" @input.debounce.300ms="fetchRunbooks" placeholder="Category">
+      </div>
+      <select x-model="runbookStatus" @change="fetchRunbooks"><option value="">All status</option><option value="active">Active</option><option value="draft">Draft</option><option value="deprecated">Deprecated</option></select>
+    </div>
+    <div class="sidebar-top" x-show="activeSection === 'briefs'">
+      <input type="text" x-model="briefLookupSlug" placeholder="TASK-001">
+      <button class="btn-primary btn-sm" @click="loadBriefBySlug">Load brief</button>
+    </div>
+
+    <div class="sidebar-list" x-show="activeSection === 'projects'">
+      <template x-if="projects.length === 0"><div class="empty-list">No projects yet.</div></template>
+      <template x-for="project in projects" :key="project.slug">
+        <div>
+          <div class="tree-item" :class="{selected: selection.slug === project.slug}" @click="selection = {type:'project', slug: project.slug}; project.expanded = !project.expanded">
+            <div class="item-title"><span x-text="project.title"></span></div>
+            <div><span class="badge" :class="project.status" x-text="project.status"></span><span class="muted" x-text="project.slug"></span></div>
+          </div>
+          <div class="tree-children" x-show="project.expanded">
+            <template x-for="epic in project.epics" :key="epic.slug">
+              <div>
+                <div class="tree-item" :class="{selected: selection.slug === epic.slug}" @click="selection = {type:'epic', slug: epic.slug, project: project.slug}; epic.expanded = !epic.expanded">
+                  <div class="item-title" x-text="epic.title"></div>
+                  <div><span class="badge" :class="epic.status" x-text="epic.status"></span><span class="muted" x-text="epic.slug"></span></div>
+                </div>
+                <div class="tree-children" x-show="epic.expanded">
+                  <template x-for="task in epic.tasks" :key="task.slug">
+                    <div>
+                      <div class="tree-item" :class="{selected: selection.slug === task.slug}" @click="selectTask(task.slug)">
+                        <div class="item-title" x-text="task.title"></div>
+                        <div><span class="badge" :class="task.status" x-text="task.status"></span><span class="muted" x-text="task.slug"></span></div>
+                      </div>
+                      <div class="tree-children">
+                        <template x-for="subtask in task.subtasks" :key="subtask.slug">
+                          <div class="tree-item" :class="{selected: selection.slug === subtask.slug}" @click="selection = {type:'subtask', slug: subtask.slug, task: task.slug}">
+                            <div class="item-title" x-text="subtask.title"></div>
+                            <div><span class="badge" :class="subtask.status" x-text="subtask.status"></span><span class="muted" x-text="subtask.slug"></span></div>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div class="sidebar-list" x-show="activeSection === 'notes'">
+      <template x-if="notes.length === 0"><div class="empty-list">No notes found.</div></template>
+      <template x-for="note in notes" :key="note.slug">
+        <div class="list-card" :class="{selected: selection.slug === note.slug}" @click="selection = {type:'note', slug: note.slug}; noteForm = {...note, tagsText: (note.tags || []).join(', ')}">
+          <div class="item-title" x-text="note.title"></div>
+          <div class="row-wrap"><template x-for="tag in note.tags || []" :key="tag"><span class="tag" x-text="tag"></span></template></div>
+          <div class="muted" x-text="note.slug"></div>
+        </div>
+      </template>
+    </div>
+
+    <div class="sidebar-list" x-show="activeSection === 'design_docs'">
+      <template x-if="designDocs.length === 0"><div class="empty-list">No design docs yet.</div></template>
+      <template x-for="doc in designDocs" :key="doc.slug">
+        <div class="list-card" :class="{selected: selection.slug === doc.slug}" @click="selectDesignDoc(doc)">
+          <div class="item-title" x-text="doc.title"></div>
+          <div class="muted" x-text="doc.slug"></div>
+        </div>
+      </template>
+    </div>
+
+    <div class="sidebar-list" x-show="activeSection === 'issues'">
+      <template x-if="issues.length === 0"><div class="empty-list">No issues found.</div></template>
+      <template x-for="issue in issues" :key="issue.slug">
+        <div class="list-card" :class="{selected: selection.slug === issue.slug}" @click="selection = {type:'issue', slug: issue.slug}; issueForm = {...issue, task_slug: issue.linked_task_slug || ''}">
+          <div class="item-title" x-text="issue.title"></div>
+          <div><span class="badge" :class="issue.status" x-text="issue.status"></span><span class="badge" :class="issue.severity" x-text="issue.severity"></span></div>
+          <div class="muted" x-text="issue.slug"></div>
+        </div>
+      </template>
+    </div>
+
+    <div class="sidebar-list" x-show="activeSection === 'runbooks'">
+      <template x-if="runbooks.length === 0"><div class="empty-list">No runbooks found.</div></template>
+      <template x-for="runbook in runbooks" :key="runbook.slug">
+        <div class="list-card" :class="{selected: selection.slug === runbook.slug}" @click="selection = {type:'runbook', slug: runbook.slug}; runbookForm = {...runbook, linked_issue_ids_text: (runbook.linked_issue_ids || []).join(', ')}">
+          <div class="item-title" x-text="runbook.title"></div>
+          <div><span class="badge" :class="runbook.status" x-text="runbook.status"></span><span class="muted" x-text="runbook.service + ' / ' + runbook.category"></span></div>
+        </div>
+      </template>
+    </div>
+
+    <div class="sidebar-list" x-show="activeSection === 'briefs'">
+      <template x-if="selectedBrief && selectedBrief.task">
+        <div class="list-card selected">
+          <div class="item-title" x-text="selectedBrief.task.title"></div>
+          <div><span class="badge" :class="selectedBrief.task.status" x-text="selectedBrief.task.status"></span><span class="muted" x-text="selectedTaskSlug"></span></div>
+        </div>
+      </template>
+      <template x-if="!selectedBrief"><div class="empty-list">Select a task to view a brief.</div></template>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="main-content" x-show="activeSection === 'projects'">
+      <div class="grid">
+        <div class="panel">
+          <h2>Create Project</h2>
+          <div class="field"><span class="field-label">Title</span><input type="text" x-model="projectForm.title"></div>
+          <div class="field"><span class="field-label">Goal</span><textarea x-model="projectForm.goal"></textarea></div>
+          <div class="field"><span class="field-label">Description</span><textarea x-model="projectForm.description"></textarea></div>
+          <div class="editor-actions"><button class="btn-primary" @click="createProject">Create project</button></div>
+        </div>
+        <div class="panel">
+          <h2>Create Epic</h2>
+          <div class="field"><span class="field-label">Project slug</span><input type="text" x-model="epicForm.project_slug" placeholder="PROJECT-001"></div>
+          <div class="field"><span class="field-label">Title</span><input type="text" x-model="epicForm.title"></div>
+          <div class="field"><span class="field-label">Description</span><textarea x-model="epicForm.description"></textarea></div>
+          <div class="editor-actions"><button class="btn-primary" @click="createEpic">Create epic</button></div>
+        </div>
+        <div class="panel">
+          <h2>Create Task</h2>
+          <div class="field"><span class="field-label">Epic slug</span><input type="text" x-model="taskForm.epic_slug" placeholder="EPIC-001"></div>
+          <div class="field"><span class="field-label">Title</span><input type="text" x-model="taskForm.title"></div>
+          <div class="field"><span class="field-label">Description</span><textarea x-model="taskForm.description"></textarea></div>
+          <div class="field"><span class="field-label">Assignee</span><input type="text" x-model="taskForm.assignee"></div>
+          <div class="field"><span class="field-label">Effort</span><select x-model="taskForm.estimated_effort"><option value="">--</option><option>xs</option><option>s</option><option>m</option><option>l</option><option>xl</option></select></div>
+          <div class="editor-actions"><button class="btn-primary" @click="createTask">Create task</button></div>
+        </div>
+        <div class="panel">
+          <h2>Create Subtask</h2>
+          <div class="field"><span class="field-label">Task slug</span><input type="text" x-model="subtaskForm.task_slug" placeholder="TASK-001"></div>
+          <div class="field"><span class="field-label">Title</span><input type="text" x-model="subtaskForm.title"></div>
+          <div class="field"><span class="field-label">Description</span><textarea x-model="subtaskForm.description"></textarea></div>
+          <div class="editor-actions"><button class="btn-primary" @click="createSubtask">Create subtask</button></div>
+        </div>
+      </div>
+      <div class="panel" x-show="selectedBrief && selectedTaskSlug">
+        <h2>Brief Viewer</h2>
+        <div class="danger-box" x-show="(selectedBrief?.completion_blockers || []).length">
+          <strong>Completion blockers</strong>
+          <ul><template x-for="blocker in (selectedBrief?.completion_blockers || [])" :key="blocker"><li x-text="blocker"></li></template></ul>
+        </div>
+        <div class="markdown" x-html="briefHtml"></div>
+      </div>
+      <div class="panel" x-show="selection.type === 'task' && taskDetail.task" style="margin-top:1rem">
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem;flex-wrap:wrap">
+          <h2 x-text="taskDetail.task?.title" style="margin:0;flex:1;min-width:0"></h2>
+          <select :value="taskDetail.task?.status" @change="updateTaskStatus($event.target.value)" style="font-size:.85rem;padding:.3rem .6rem">
+            <option>draft</option><option>ready</option><option>in_progress</option><option>review</option><option>complete</option><option>blocked</option>
+          </select>
+          <button class="btn-secondary btn-sm" @click="activeSection='briefs'; selectedTaskSlug=selection.slug; loadBriefBySlug(selection.slug)">View Brief</button>
+        </div>
+
+        <div style="margin-bottom:1.5rem">
+          <h3 style="margin-bottom:.5rem">Acceptance Criteria</h3>
+          <template x-for="c in taskDetail.criteria" :key="c.id">
+            <div style="display:flex;align-items:flex-start;gap:.5rem;margin:.4rem 0">
+              <input type="checkbox" :checked="c.verified" @change="toggleCriterion(c.id, $event.target.checked)" style="margin-top:.2rem">
+              <span :style="c.verified ? 'text-decoration:line-through;opacity:.55' : ''" x-text="c.description"></span>
+            </div>
+          </template>
+          <p class="muted" x-show="taskDetail.criteria.length === 0" style="font-size:.85rem;margin:.25rem 0">No criteria yet.</p>
+          <div style="display:flex;gap:.5rem;margin-top:.6rem">
+            <input type="text" x-model="newCriterion" placeholder="Add acceptance criterion…" style="flex:1" @keydown.enter="addCriterion">
+            <button class="btn-secondary btn-sm" @click="addCriterion">Add</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom:1.5rem">
+          <h3 style="margin-bottom:.5rem">Testing Layers</h3>
+          <template x-for="t in taskDetail.testingLayers" :key="t.id">
+            <div style="display:flex;align-items:center;gap:.5rem;margin:.4rem 0;flex-wrap:wrap">
+              <span class="badge" x-text="t.layer"></span>
+              <span style="flex:1;min-width:0" x-text="t.description"></span>
+              <select :value="t.status" @change="updateTestingLayerStatus(t.id, $event.target.value)" style="font-size:.8rem;padding:.2rem .4rem">
+                <option>pending</option><option>passed</option><option>failed</option><option>skipped</option>
+              </select>
+            </div>
+          </template>
+          <p class="muted" x-show="taskDetail.testingLayers.length === 0" style="font-size:.85rem;margin:.25rem 0">No testing layers yet.</p>
+          <div style="display:flex;gap:.5rem;margin-top:.6rem;flex-wrap:wrap">
+            <select x-model="newTestingLayer.layer" style="font-size:.85rem;padding:.3rem .5rem">
+              <option>unit</option><option>integration</option><option>e2e</option><option>manual</option><option>observability</option>
+            </select>
+            <input type="text" x-model="newTestingLayer.description" placeholder="Testing layer description…" style="flex:1;min-width:12rem" @keydown.enter="addTestingLayer">
+            <button class="btn-secondary btn-sm" @click="addTestingLayer">Add</button>
+          </div>
+        </div>
+
+        <div>
+          <h3 style="margin-bottom:.5rem">Definition of Done</h3>
+          <textarea x-model="taskDetail.dod.dod_description" placeholder="Describe what 'done' means for this task…" style="min-height:100px"></textarea>
+          <div class="editor-actions" style="margin-top:.5rem"><button class="btn-primary" @click="saveDoD">Save DoD</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content" x-show="activeSection === 'notes'">
+      <div class="panel">
+        <h2 x-text="selection.type === 'note' ? 'Edit Note' : 'Create Note'"></h2>
+        <div class="field"><span class="field-label">Title</span><input type="text" x-model="noteForm.title"></div>
+        <div class="field"><span class="field-label">Body</span><textarea x-model="noteForm.body"></textarea></div>
+        <div class="field"><span class="field-label">Tags (comma-separated)</span><input type="text" x-model="noteForm.tagsText"></div>
+        <div class="warning" x-show="!noteHasScopeTag()">At least one tag must start with <code>scope:</code>.</div>
+        <div class="editor-actions">
+          <button class="btn-primary" @click="saveNote" :disabled="!noteHasScopeTag()">Save note</button>
+          <button class="btn-warning" x-show="selection.type === 'note'" @click="archiveSelectedNote">Archive</button>
+          <button class="btn-secondary" @click="resetNoteForm">New note</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content" x-show="activeSection === 'design_docs'">
+      <div class="grid">
+        <div class="panel">
+          <h2 x-text="selection.type === 'design_doc' ? 'Edit Design Doc' : 'Create Design Doc'"></h2>
+          <div class="field"><span class="field-label">Title</span><input type="text" x-model="designDocForm.title"></div>
+          <div class="field"><span class="field-label">Tags</span><input type="text" x-model="designDocForm.tagsText" placeholder="architecture, service"></div>
+          <div class="field" x-show="selection.type !== 'design_doc'"><span class="field-label">Link to epic</span><input type="text" x-model="designDocForm.epicSlug" placeholder="EPIC-001 (optional)"></div>
+          <div class="field"><span class="field-label">Content</span><textarea x-model="designDocForm.content" style="min-height:260px"></textarea></div>
+          <div class="editor-actions">
+            <label class="btn-secondary btn-sm" style="cursor:pointer">Upload<input type="file" accept=".md,.txt" style="display:none" @change="loadDocFile"></label>
+            <button class="btn-primary" @click="saveDesignDoc">Save design doc</button>
+            <button class="btn-secondary" @click="resetDesignDocForm">New doc</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Link to Epic</h2>
+          <template x-if="!selection.slug">
+            <p class="muted" style="font-size:.85rem">Select a doc from the list to link it to an additional epic.</p>
+          </template>
+          <template x-if="selection.slug">
+            <div>
+              <p class="muted" style="font-size:.85rem;margin-bottom:.5rem">Linking: <strong x-text="selection.slug"></strong></p>
+              <div class="field"><span class="field-label">Epic slug</span><input type="text" x-model="designDocLink.epic_slug" placeholder="EPIC-001"></div>
+              <div class="editor-actions"><button class="btn-primary" @click="linkDesignDoc">Link to epic</button></div>
+            </div>
+          </template>
+          <template x-if="selectedDocChunks.length">
+            <div style="margin-top:1rem">
+              <h3>Chunks</h3>
+              <template x-for="chunk in selectedDocChunks" :key="chunk.id"><div class="panel" style="margin-top:.5rem"><div class="item-title" x-text="chunk.section_heading"></div><div class="muted" x-text="chunk.content"></div></div></template>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content" x-show="activeSection === 'issues'">
+      <div class="panel">
+        <h2 x-text="selection.type === 'issue' ? 'Edit Issue' : 'Create Issue'"></h2>
+        <div class="grid">
+          <div class="field"><span class="field-label">Title</span><input type="text" x-model="issueForm.title"></div>
+          <div class="field"><span class="field-label">Severity</span><select x-model="issueForm.severity"><option>sev1</option><option>sev2</option><option>sev3</option></select></div>
+        </div>
+        <div class="field"><span class="field-label">Task slug</span><input type="text" x-model="issueForm.task_slug" placeholder="TASK-001"></div>
+        <div class="field"><span class="field-label">Triage steps</span><textarea x-model="issueForm.triage_steps"></textarea></div>
+        <div class="field"><span class="field-label">Root cause</span><textarea x-model="issueForm.root_cause"></textarea></div>
+        <div class="field"><span class="field-label">Resolution</span><textarea x-model="issueForm.resolution"></textarea></div>
+        <div class="field"><span class="field-label">Lessons learned</span><textarea x-model="issueForm.lessons_learned"></textarea></div>
+        <div class="editor-actions">
+          <button class="btn-primary" @click="saveIssue">Save issue</button>
+          <button class="btn-warning" x-show="selection.type === 'issue'" @click="resolveSelectedIssue">Resolve</button>
+          <button class="btn-secondary" @click="resetIssueForm">New issue</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content" x-show="activeSection === 'runbooks'">
+      <div class="panel">
+        <h2 x-text="selection.type === 'runbook' ? 'Edit Runbook' : 'Create Runbook'"></h2>
+        <div class="grid">
+          <div class="field"><span class="field-label">Title</span><input type="text" x-model="runbookForm.title"></div>
+          <div class="field"><span class="field-label">Service</span><input type="text" x-model="runbookForm.service"></div>
+          <div class="field"><span class="field-label">Category</span><input type="text" x-model="runbookForm.category"></div>
+          <div class="field"><span class="field-label">Status</span><select x-model="runbookForm.status"><option>draft</option><option>active</option><option>deprecated</option></select></div>
+        </div>
+        <div class="field"><span class="field-label">Symptoms</span><textarea x-model="runbookForm.symptoms"></textarea></div>
+        <div class="field"><span class="field-label">Prerequisites</span><textarea x-model="runbookForm.prerequisites"></textarea></div>
+        <div class="field"><span class="field-label">Steps</span><textarea x-model="runbookForm.steps"></textarea></div>
+        <div class="field"><span class="field-label">Verification</span><textarea x-model="runbookForm.verification"></textarea></div>
+        <div class="field"><span class="field-label">Escalation</span><textarea x-model="runbookForm.escalation"></textarea></div>
+        <div class="field"><span class="field-label">Linked issue ids</span><input type="text" x-model="runbookForm.linked_issue_ids_text" placeholder="1,2"></div>
+        <div class="editor-actions">
+          <button class="btn-primary" @click="saveRunbook">Save runbook</button>
+          <button class="btn-warning" x-show="selection.type === 'runbook'" @click="validateSelectedRunbook">Validate</button>
+          <button class="btn-secondary" @click="resetRunbookForm">New runbook</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content" x-show="activeSection === 'briefs'">
+      <div class="panel" x-show="selectedBrief">
+        <h2>Task Brief</h2>
+        <div class="danger-box" x-show="(selectedBrief?.completion_blockers || []).length">
+          <strong>Completion blockers</strong>
+          <ul><template x-for="blocker in (selectedBrief?.completion_blockers || [])" :key="blocker"><li x-text="blocker"></li></template></ul>
+        </div>
+        <div class="markdown" x-html="briefHtml"></div>
+      </div>
+      <div class="empty-state panel" x-show="!selectedBrief">Select a task to render its markdown brief.</div>
+    </div>
+  </main>
+</div>
+<div class="toast" x-show="toast" x-text="toast" x-cloak></div>
+<script>
+function app() {
+  return {
+    sections: [
+      { key: 'projects', label: 'Projects' },
+      { key: 'notes', label: 'Notes' },
+      { key: 'design_docs', label: 'Design Docs' },
+      { key: 'issues', label: 'Issues' },
+      { key: 'runbooks', label: 'Runbooks' },
+      { key: 'briefs', label: 'Brief Viewer' },
+    ],
+    activeSection: 'projects', error: null, toast: null,
+    projects: [], notes: [], noteTags: [], designDocs: [], selectedDocChunks: [], issues: [], runbooks: [],
+    selectedTaskSlug: '', selectedBrief: null, briefHtml: '', briefLookupSlug: '', selection: {},
+    taskDetail: { task: null, criteria: [], testingLayers: [], dod: { dod_description: '', checklist: [] } },
+    newCriterion: '',
+    newTestingLayer: { layer: 'unit', description: '' },
+    noteSearch: '', noteSearchMode: 'text', noteFilterTag: '', showArchivedNotes: false,
+    issueStatus: '', issueSeverity: '', runbookService: '', runbookCategory: '', runbookStatus: '',
+    projectForm: { title: '', goal: '', description: '' },
+    epicForm: { project_slug: '', title: '', description: '' },
+    taskForm: { epic_slug: '', title: '', description: '', assignee: '', estimated_effort: '' },
+    subtaskForm: { task_slug: '', title: '', description: '' },
+    noteForm: { title: '', body: '', tagsText: '' },
+    designDocForm: { slug: '', title: '', content: '', tagsText: '', epicSlug: '' },
+    designDocLink: { epic_slug: '', design_doc_id: '' },
+    issueForm: { title: '', severity: 'sev2', task_slug: '', triage_steps: '', root_cause: '', resolution: '', lessons_learned: '' },
+    runbookForm: { title: '', service: '', category: '', status: 'draft', symptoms: '', prerequisites: '', steps: '', verification: '', escalation: '', linked_issue_ids_text: '' },
+
+    async init() { await Promise.all([this.refreshProjects(), this.fetchNotes(), this.fetchDesignDocs(), this.fetchIssues(), this.fetchRunbooks()]); },
+    async api(path, options = {}) {
+      const response = await fetch(`/api${path}`, { headers: { 'Content-Type': 'application/json' }, ...options });
+      const isJson = response.headers.get('content-type')?.includes('application/json');
+      const payload = isJson ? await response.json() : await response.text();
+      if (!response.ok) throw new Error(typeof payload === 'string' ? payload : JSON.stringify(payload));
+      return payload;
+    },
+    notify(message) { this.toast = message; setTimeout(() => this.toast = null, 2500); },
+    handleError(error) { this.error = error.message || String(error); },
+    tagsTextToArray(text) { return (text || '').split(',').map(v => v.trim()).filter(Boolean); },
+
+    async refreshProjects() {
+      try {
+        const projects = await this.api('/projects');
+        for (const project of projects) {
+          project.expanded = true;
+          project.epics = await this.api(`/projects/${project.slug}/epics`);
+          for (const epic of project.epics) {
+            epic.expanded = true;
+            epic.tasks = await this.api(`/epics/${epic.slug}/tasks`);
+            for (const task of epic.tasks) {
+              task.subtasks = await this.api(`/tasks/${task.slug}/subtasks`);
+            }
+          }
+        }
+        this.projects = projects;
+      } catch (error) { this.handleError(error); }
+    },
+    async createProject() {
+      try { await this.api('/projects', { method: 'POST', body: JSON.stringify(this.projectForm) }); this.projectForm = { title: '', goal: '', description: '' }; await this.refreshProjects(); this.notify('Project created'); } catch (error) { this.handleError(error); }
+    },
+    async createEpic() {
+      try { await this.api(`/projects/${this.epicForm.project_slug}/epics`, { method: 'POST', body: JSON.stringify({ title: this.epicForm.title, description: this.epicForm.description }) }); this.epicForm = { project_slug: '', title: '', description: '' }; await this.refreshProjects(); this.notify('Epic created'); } catch (error) { this.handleError(error); }
+    },
+    async createTask() {
+      try { await this.api(`/epics/${this.taskForm.epic_slug}/tasks`, { method: 'POST', body: JSON.stringify({ title: this.taskForm.title, description: this.taskForm.description, assignee: this.taskForm.assignee || null, estimated_effort: this.taskForm.estimated_effort || null }) }); this.taskForm = { epic_slug: '', title: '', description: '', assignee: '', estimated_effort: '' }; await this.refreshProjects(); this.notify('Task created'); } catch (error) { this.handleError(error); }
+    },
+    async createSubtask() {
+      try { await this.api(`/tasks/${this.subtaskForm.task_slug}/subtasks`, { method: 'POST', body: JSON.stringify({ title: this.subtaskForm.title, description: this.subtaskForm.description }) }); this.subtaskForm = { task_slug: '', title: '', description: '' }; await this.refreshProjects(); this.notify('Subtask created'); } catch (error) { this.handleError(error); }
+    },
+    async selectTask(slug) {
+      this.selection = { type: 'task', slug };
+      this.taskDetail = { task: null, criteria: [], testingLayers: [], dod: { dod_description: '', checklist: [] } };
+      await this.loadTaskDetail(slug);
+    },
+    async loadTaskDetail(slug) {
+      try {
+        const [task, criteria, testingLayers, dod] = await Promise.all([
+          this.api(`/tasks/${slug}`),
+          this.api(`/tasks/${slug}/acceptance-criteria`),
+          this.api(`/tasks/${slug}/testing-layers`),
+          this.api(`/tasks/${slug}/dod`),
+        ]);
+        this.taskDetail = { task, criteria, testingLayers, dod: { dod_description: dod.dod_description || '', checklist: dod.checklist || [] } };
+      } catch (error) { this.handleError(error); }
+    },
+    async addCriterion() {
+      if (!this.newCriterion.trim()) return;
+      try {
+        const item = await this.api(`/tasks/${this.selection.slug}/acceptance-criteria`, { method: 'POST', body: JSON.stringify({ description: this.newCriterion.trim() }) });
+        this.taskDetail.criteria.push(item);
+        this.newCriterion = '';
+      } catch (error) { this.handleError(error); }
+    },
+    async toggleCriterion(id, verified) {
+      try {
+        const item = await this.api(`/tasks/${this.selection.slug}/acceptance-criteria/${id}`, { method: 'PATCH', body: JSON.stringify({ verified }) });
+        const idx = this.taskDetail.criteria.findIndex(c => c.id === id);
+        if (idx >= 0) this.taskDetail.criteria[idx] = item;
+      } catch (error) { this.handleError(error); }
+    },
+    async addTestingLayer() {
+      if (!this.newTestingLayer.description.trim()) return;
+      try {
+        const item = await this.api(`/tasks/${this.selection.slug}/testing-layers`, { method: 'POST', body: JSON.stringify({ layer: this.newTestingLayer.layer, description: this.newTestingLayer.description.trim() }) });
+        this.taskDetail.testingLayers.push(item);
+        this.newTestingLayer.description = '';
+      } catch (error) { this.handleError(error); }
+    },
+    async updateTestingLayerStatus(id, status) {
+      try {
+        const item = await this.api(`/tasks/${this.selection.slug}/testing-layers/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+        const idx = this.taskDetail.testingLayers.findIndex(t => t.id === id);
+        if (idx >= 0) this.taskDetail.testingLayers[idx] = item;
+      } catch (error) { this.handleError(error); }
+    },
+    async updateTaskStatus(status) {
+      try {
+        const task = await this.api(`/tasks/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+        this.taskDetail.task = task;
+        await this.refreshProjects();
+      } catch (error) { this.handleError(error); }
+    },
+    async saveDoD() {
+      try {
+        const dod = await this.api(`/tasks/${this.selection.slug}/dod`, { method: 'PATCH', body: JSON.stringify({ dod_description: this.taskDetail.dod.dod_description }) });
+        this.taskDetail.dod = { dod_description: dod.dod_description || '', checklist: dod.checklist || [] };
+        this.notify('DoD saved');
+      } catch (error) { this.handleError(error); }
+    },
+    async loadBriefBySlug(slug = null) {
+      const target = slug || this.briefLookupSlug || this.selectedTaskSlug;
+      if (!target) return;
+      try {
+        this.selectedTaskSlug = target;
+        this.selectedBrief = await this.api(`/briefs/task/${target}`);
+        const markdown = await this.api(`/briefs/task/${target}/markdown`);
+        this.briefHtml = marked.parse(markdown);
+      } catch (error) { this.handleError(error); }
+    },
+
+    noteHasScopeTag() { return this.tagsTextToArray(this.noteForm.tagsText).some(tag => tag.startsWith('scope:')); },
+    resetNoteForm() { this.selection = {}; this.noteForm = { title: '', body: '', tagsText: '' }; },
+    async fetchNotes() {
+      try {
+        const params = new URLSearchParams();
+        if (this.noteFilterTag) params.set('tag', this.noteFilterTag);
+        if (this.showArchivedNotes) params.set('include_archived', 'true');
+        if (this.noteSearch && this.noteSearchMode === 'semantic') params.set('q', this.noteSearch);
+        let notes = await this.api(`/notes?${params.toString()}`);
+        if (this.noteSearch && this.noteSearchMode === 'text') {
+          const q = this.noteSearch.toLowerCase();
+          notes = notes.filter(note => `${note.title} ${note.body} ${(note.tags || []).join(' ')}`.toLowerCase().includes(q));
+        }
+        this.notes = notes;
+        this.noteTags = [...new Set(notes.flatMap(note => note.tags || []))].sort();
+      } catch (error) { this.handleError(error); }
+    },
+    async saveNote() {
+      const payload = { title: this.noteForm.title, body: this.noteForm.body, tags: this.tagsTextToArray(this.noteForm.tagsText) };
+      try {
+        if (this.selection.type === 'note') {
+          await this.api(`/notes/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
+        } else {
+          await this.api('/notes', { method: 'POST', body: JSON.stringify(payload) });
+        }
+        this.resetNoteForm(); await this.fetchNotes(); this.notify('Note saved');
+      } catch (error) { this.handleError(error); }
+    },
+    async archiveSelectedNote() {
+      if (this.selection.type !== 'note') return;
+      try { await this.api(`/notes/${this.selection.slug}/archive`, { method: 'POST' }); this.resetNoteForm(); await this.fetchNotes(); this.notify('Note archived'); } catch (error) { this.handleError(error); }
+    },
+
+    resetDesignDocForm() { this.selection = {}; this.designDocForm = { slug: '', title: '', content: '', tagsText: '', epicSlug: '' }; this.selectedDocChunks = []; },
+    async fetchDesignDocs() { try { this.designDocs = await this.api('/design-docs'); } catch (error) { this.handleError(error); } },
+    async selectDesignDoc(doc) {
+      this.selection = { type: 'design_doc', slug: doc.slug };
+      this.designDocForm = { slug: doc.slug, title: doc.title, content: doc.content, tagsText: (doc.tags || []).join(', ') };
+      this.designDocLink.design_doc_id = doc.id;
+      try { this.selectedDocChunks = await this.api(`/design-docs/${doc.slug}/chunks`); } catch (error) { this.handleError(error); }
+    },
+    async saveDesignDoc() {
+      const payload = { title: this.designDocForm.title, content: this.designDocForm.content, tags: this.tagsTextToArray(this.designDocForm.tagsText) };
+      try {
+        if (this.selection.type === 'design_doc') {
+          await this.api(`/design-docs/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
+        } else {
+          const doc = await this.api('/design-docs', { method: 'POST', body: JSON.stringify(payload) });
+          if (this.designDocForm.epicSlug.trim()) {
+            await this.api(`/epics/${this.designDocForm.epicSlug.trim()}/design-docs`, { method: 'POST', body: JSON.stringify({ design_doc_id: doc.id }) });
+          }
+        }
+        await this.fetchDesignDocs(); this.notify('Design doc saved');
+      } catch (error) { this.handleError(error); }
+    },
+    async loadDocFile(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      this.designDocForm.content = await file.text();
+      if (!this.designDocForm.title) this.designDocForm.title = file.name;
+    },
+    async linkDesignDoc() {
+      try { await this.api(`/epics/${this.designDocLink.epic_slug}/design-docs`, { method: 'POST', body: JSON.stringify({ design_doc_id: Number(this.designDocLink.design_doc_id) }) }); this.notify('Design doc linked'); } catch (error) { this.handleError(error); }
+    },
+
+    resetIssueForm() { this.selection = {}; this.issueForm = { title: '', severity: 'sev2', task_slug: '', triage_steps: '', root_cause: '', resolution: '', lessons_learned: '' }; },
+    async fetchIssues() {
+      try {
+        const params = new URLSearchParams();
+        if (this.issueStatus) params.set('status', this.issueStatus);
+        if (this.issueSeverity) params.set('severity', this.issueSeverity);
+        this.issues = await this.api(`/issues?${params.toString()}`);
+      } catch (error) { this.handleError(error); }
+    },
+    async saveIssue() {
+      const payload = { ...this.issueForm, task_slug: this.issueForm.task_slug || null };
+      try {
+        if (this.selection.type === 'issue') {
+          await this.api(`/issues/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
+        } else {
+          await this.api('/issues', { method: 'POST', body: JSON.stringify(payload) });
+        }
+        this.resetIssueForm(); await this.fetchIssues(); this.notify('Issue saved');
+      } catch (error) { this.handleError(error); }
+    },
+    async resolveSelectedIssue() {
+      if (this.selection.type !== 'issue') return;
+      try { await this.api(`/issues/${this.selection.slug}/resolve`, { method: 'POST' }); await this.fetchIssues(); this.notify('Issue resolved'); } catch (error) { this.handleError(error); }
+    },
+
+    resetRunbookForm() { this.selection = {}; this.runbookForm = { title: '', service: '', category: '', status: 'draft', symptoms: '', prerequisites: '', steps: '', verification: '', escalation: '', linked_issue_ids_text: '' }; },
+    async fetchRunbooks() {
+      try {
+        const params = new URLSearchParams();
+        if (this.runbookService) params.set('service', this.runbookService);
+        if (this.runbookCategory) params.set('category', this.runbookCategory);
+        if (this.runbookStatus) params.set('status', this.runbookStatus);
+        this.runbooks = await this.api(`/runbooks?${params.toString()}`);
+      } catch (error) { this.handleError(error); }
+    },
+    async saveRunbook() {
+      const payload = { ...this.runbookForm, linked_issue_ids: this.tagsTextToArray(this.runbookForm.linked_issue_ids_text).map(Number).filter(Boolean) };
+      delete payload.linked_issue_ids_text;
+      try {
+        if (this.selection.type === 'runbook') {
+          await this.api(`/runbooks/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
+        } else {
+          await this.api('/runbooks', { method: 'POST', body: JSON.stringify(payload) });
+        }
+        this.resetRunbookForm(); await this.fetchRunbooks(); this.notify('Runbook saved');
+      } catch (error) { this.handleError(error); }
+    },
+    async validateSelectedRunbook() {
+      if (this.selection.type !== 'runbook') return;
+      try { await this.api(`/runbooks/${this.selection.slug}/validate`, { method: 'POST' }); await this.fetchRunbooks(); this.notify('Runbook validated'); } catch (error) { this.handleError(error); }
+    },
+  };
+}
+</script>
+</body>
+</html>

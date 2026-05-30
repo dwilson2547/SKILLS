@@ -1,0 +1,21 @@
+services:
+  api:
+    build: ./api
+    image: dwilson2547/work-manager-api:latest
+    ports:
+      - "8010:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - TOOL_DOCS_REINDEX_CRON=${TOOL_DOCS_REINDEX_CRON:-0 3 * * *}
+    restart: unless-stopped
+
+  ui:
+    build: ./ui
+    image: dwilson2547/work-manager-ui:latest
+    ports:
+      - "3010:80"
+    depends_on:
+      - api
+    restart: unless-stopped
