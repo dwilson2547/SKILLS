@@ -67,6 +67,7 @@ def create_task(
     description: str | None = typer.Option(None, "--description"),
     assignee: str | None = typer.Option(None, "--assignee"),
     estimated_effort: str | None = typer.Option(None, "--estimated-effort"),
+    tags: str | None = typer.Option(None, "--tags", help="Comma-separated tags, must include at least one scope: tag"),
 ):
     payload = {
         "title": title,
@@ -74,6 +75,8 @@ def create_task(
         "assignee": assignee,
         "estimated_effort": estimated_effort,
     }
+    if tags:
+        payload["tags"] = [t.strip() for t in tags.split(",") if t.strip()]
     payload = {k: v for k, v in payload.items() if v is not None}
     try:
         task = client.request("POST", f"/epics/{epic}/tasks", json=payload)

@@ -2,7 +2,7 @@ import os
 
 import httpx
 
-BASE_URL = os.getenv("WORKMAN_API_URL", "http://localhost:8000").rstrip("/")
+BASE_URL = os.getenv("WORKMAN_API_URL", "http://localhost:8010").rstrip("/")
 
 
 class APIError(RuntimeError):
