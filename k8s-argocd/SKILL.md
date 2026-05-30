@@ -44,14 +44,24 @@ Plain Kubernetes manifests at `workspace/cluster_config/`. ArgoCD auto-syncs on 
 ### 2. Helm-based — external repos (gyopart, scrape-stack)
 These repos manage their own Helm charts and use a branch strategy for environments:
 
-| App | Repo | Branch | Namespace | Values |
-|---|---|---|---|---|
-| gyopart | `workspace/gyopart` | `main` | `gyopart` | `values.yaml` |
-| gyopart-dev | `workspace/gyopart` | `dev` | `gyopart-dev` | `values-dev.yaml` |
-| scrape-stack | scrape-stack repo | `main` | `scrape-stack` | — |
-| scrape-stack-dev | scrape-stack repo | `dev` | `scrape-stack-dev` | — |
+| App | Repo | Branch | Namespace | Domain | Values |
+|---|---|---|---|---|---|
+| gyopart | `workspace/gyopart` | `main` | `gyopart` | `gyopart.local` | `values.yaml` |
+| gyopart-dev | `workspace/gyopart` | `dev` | `gyopart-dev` | `gyopart-dev.local` | `values-dev.yaml` |
+| scrape-stack | `workspace/web_scrapers/scrape_stack` | `main` | `scrape-stack` | `scrapestack.local` | `values.yaml` |
+| scrape-stack-dev | `workspace/web_scrapers/scrape_stack` | `dev` | `scrapestack-dev` | `scrapestack-dev.local` | `values-dev.yaml` |
+| robo-services | `workspace/robo-services` | `main` | `robo-services` | `*.robo-services.local` | `helm/robo-services/values.yaml` |
 
 **To update:** edit Helm chart or values → commit → push to the appropriate branch.
+
+**Scrape-stack** services: browserless, request-auth-server/api/ui, webcache, imgcache, filecache, vidcache, cache-browser-api/ui.
+Helm: `helm/scrape-stack/`. ArgoCD manifests live in the scrape-stack repo at `argocd/scrape-stack.yaml` + `argocd/scrape-stack-dev.yaml` — apply manually when changed.
+Image updates: dev uses `imagePullPolicy: Always` (push → auto-rollout on next sync); prod requires an explicit tag bump in `values.yaml`.
+
+**Gyopart** services: gyopart-api (:8200), gyopart-ui (:80), inventory-api (:8100), admin-api (:8300).
+Helm: `gyopart/helm/gyopart/`. ArgoCD manifests: `cluster_config/argocd/gyopart.yaml` + `gyopart-dev.yaml`.
+Always build/push from the gyopart root: `docker compose build <service> && docker compose push <service>`.
+After pushing: `kubectl rollout restart deployment/<name> -n gyopart-dev`.
 
 ---
 
@@ -95,21 +105,6 @@ When deploying a new service, complete each of the following steps **only if app
 4. **Update the changelog** — **always required** when any change is made to `cluster_config`. Update `cluster_config/CHANGELOG.md` with a dated entry describing what was added, changed, or fixed. The changelog is non-negotiable — no cluster_config commit should go out without it.
 
 After pushing both repos, refresh the relevant ArgoCD apps and verify each change took effect.
-
----
-
-## Docker Images (gyopart services)
-
-Never use raw `docker build` or `docker push`. Always build and push from the gyopart repo root:
-```bash
-docker compose build <service> && docker compose push <service>
-```
-After pushing, restart the deployment to pull the new image:
-```bash
-kubectl rollout restart deployment/<name> -n gyopart-dev
-```
-
-Check `imagePullPolicy` in the relevant values file if pods keep running the old image after a push.
 
 ---
 
