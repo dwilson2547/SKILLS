@@ -71,6 +71,125 @@ P2, but they still go in the report.
 
 ---
 
+## UX Design Quality — Beyond Functional Correctness
+
+Passing the baseline checklist means the UI is *functional*. It does not mean it is *good*.
+A UI where you can technically accomplish every workflow but have to fight the layout to do
+it is still a bad UI. Assess these design quality dimensions separately from functional
+correctness. Each failure here is at minimum a P1 — a UI that works but is painful to use
+is a UI that gets abandoned.
+
+### Information architecture
+
+**The question:** Does each surface show exactly the information and actions relevant to what
+the user is currently doing — nothing more, nothing less?
+
+Failures to call out:
+- **All CRUD on one page.** If a page has simultaneous create forms for four different entity
+  types (e.g., Project / Epic / Task / Subtask all at once), that is not a UI — it is a form
+  dump. A user with a specific intent ("I want to create a task under this epic") is forced to
+  visually navigate around three irrelevant forms to find the one they need. This is always
+  wrong.
+- **Unrelated content sharing a surface.** A project detail panel and four create forms on
+  the same page compete for visual weight. They have nothing to do with each other in context.
+- **Lists and editors on the same surface without clear visual separation.** A sidebar list
+  and a main edit panel can coexist, but they must have a clear visual hierarchy — not feel
+  like one undifferentiated block of content.
+
+### Progressive disclosure
+
+**The question:** Does the UI surface the right action at the right time, rather than all
+possible actions at all times?
+
+Failures to call out:
+- **Context-blind forms.** If the user has just selected an epic in a tree, the "Create Task"
+  form should either automatically scope to that epic or clearly indicate it will. Showing a
+  blank epic_slug field is wrong — the system already knows which epic is selected.
+- **Always-visible forms for infrequently used actions.** Create forms that are always visible
+  consume space and add noise even when the user's intent is to browse or edit, not create.
+  Create actions belong behind a button ("+ New Task") that reveals a form only when requested.
+- **All-fields-always-visible on complex entities.** A task with 8+ fields does not benefit
+  from showing all 8 fields simultaneously at rest. Group fields by relevance (core fields
+  always visible, advanced fields in a collapsible or secondary panel).
+
+### Interaction model fit
+
+**The question:** Is the interaction pattern (modal, inline edit, dedicated page, panel,
+side drawer) appropriate for the complexity and frequency of the action?
+
+| Situation | Appropriate pattern |
+|---|---|
+| Quick status update, single-field edit | Inline — click value, edit in place |
+| Create a new entity with 3–5 fields | Small modal or inline form that appears on "+ New" click |
+| Create/edit a complex entity (6+ fields) | Side panel or dedicated view with clear save/cancel |
+| Destructive action (delete, archive) | Confirmation modal — never an inline button that fires immediately |
+| Cross-entity relationship (link issue to task) | Inline selector within the parent entity's panel — never a separate form in a separate section |
+| Full document editing (design doc content) | Dedicated editor panel — not a small textarea embedded in a list |
+
+Failures to call out:
+- Using a static form for an action that should be a modal (create entity appears always, should appear on demand)
+- Using navigation to a separate section for an action that should be inline (linking an issue requires leaving the task)
+- Using raw inputs for relationship fields that require a picker
+- Mixing read and edit states with no clear mode distinction (is this view-mode or edit-mode?)
+
+### Cognitive load
+
+**The question:** How many decisions must the user make before they can do the thing they
+came to do?
+
+A well-designed UI for "create a task under epic EPIC-003" should be:
+1. Click the epic in the tree → epic is selected
+2. Click "+ New Task" → create form appears, pre-scoped to this epic
+3. Fill title → submit
+
+If the user instead must:
+1. Locate the "Create Task" form on the page (it's always visible somewhere)
+2. Manually determine the epic's slug by reading the sidebar
+3. Type or copy/paste the slug into the epic_slug field
+4. Fill title → submit
+
+...that is 2 unnecessary decisions and 1 error-prone manual step. Call it out as a design
+failure, not just a missing feature.
+
+**Indicators of high cognitive load to flag:**
+- User must hold context in their head (remember a slug, ID, or selection) to complete a
+  form in a different part of the page
+- User must decide which of several identical-looking forms is the right one
+- User cannot predict where the result of their action will appear
+- User cannot tell if an action succeeded without looking in multiple places
+
+### Spatial consistency
+
+**The question:** Do similar things look and behave the same way throughout the system?
+
+Failures to call out:
+- An "Archive" button that appears in the toolbar for notes but in a detail panel for issues
+- A filter control that appears above the list in one section and below it in another
+- Status badges that use different color semantics in different sections
+- Create actions that use a modal in one section and an always-visible form in another
+- Detail panels that open on the right in one section and below the list in another
+
+Spatial inconsistency is not cosmetic. It forces the user to re-learn the UI in every section
+instead of building transferable mental models. Flag any inconsistency, even if each
+individual implementation is technically functional.
+
+### Verdict calibration
+
+Use these thresholds when assessing overall UX design quality:
+
+- **Acceptable:** Every surface shows contextually relevant content. Create actions are behind
+  buttons. Forms are pre-populated from current context. Interaction patterns are consistent.
+  The user can complete any workflow in ≤3 deliberate actions without holding state in their
+  head.
+- **Needs work (P1):** One or two surfaces have too much simultaneous content, or a create
+  form is not fully context-aware, or an interaction model is slightly mismatched (modal where
+  inline would be better).
+- **Poor (P0):** Multiple form dumps, context is never propagated, user must constantly
+  copy/paste between sections, interaction patterns differ section to section with no
+  consistency.
+
+---
+
 ## Step 1 — Workflow Elicitation
 
 Before touching any code, ask the user to describe how they will use the UI. Prompt with:
