@@ -10,13 +10,79 @@ what the user actually needs to do — not what the backend can do.
 
 ---
 
+## First Principles Reasoning — Before Any Checklist
+
+Before looking at the actual UI, reason about the system from the user's perspective. This
+step is not optional and must come first. Checklists confirm problems — they do not find the
+important ones. The important ones are obvious the moment you understand how the system is
+actually used. If you find yourself hunting for problems, you are using the wrong frame.
+
+### Step 0a — Derive the primary use case
+
+Answer these questions before looking at a single line of UI:
+
+1. **What is this system for?** Describe it in one sentence from the user's point of view,
+   not the system's. Not "a task management system" — instead: "a tool that lets agents and
+   humans pick up the next unit of work, execute it, and record what they learned."
+
+2. **What does the user do 80% of the time?** Identify the one action that dominates all
+   others. This is the hero flow. Everything else is secondary. In a project management tool,
+   the hero flow is almost never "create a new project" — it is "find and work the next task."
+
+3. **What is the user's mental state when they arrive?** Are they setting something up
+   (unhurried, planning mode)? Working through a task (focused, task-oriented)? Responding to
+   a problem (stressed, wants the fastest path)? The answer determines what information should
+   be prominent and what should be out of the way.
+
+4. **What decisions should the system make for the user vs expose to the user?** If the user
+   has selected an epic, the system knows the epic. Why would it ask them to type it again?
+   Every field the user fills in that the system already knows is a design failure, not a
+   missing feature.
+
+### Step 0b — Design the ideal experience in your head
+
+Without looking at what was built, describe what a thoughtful UX designer would build for
+this primary use case. Be specific:
+
+- What is the first thing the user sees?
+- What is the hero surface — the panel or view that gets the most screen real estate?
+- What is one click away from the hero surface vs two or three?
+- What is hidden behind a button or collapsed by default, and why?
+
+Write this down before looking at the actual UI. This becomes your reference point.
+
+### Step 0c — Compare ideal to actual
+
+Now look at the actual UI. The gap between your ideal and what was built is the report.
+
+**The test:** Can you see the primary failure within 30 seconds of understanding what the
+system is for? If yes, you have found the most important thing. If no, you are probably
+analyzing features rather than experience.
+
+A UI built by someone thinking about database completeness looks completely different from
+one built by someone thinking about how it will be used. The DBMS thinker ships a page with
+four create forms (one per entity type), because each entity needs a form and the task is
+done. The UX thinker ships a contextual flow where the form for the thing you are most likely
+to create right now is the only one visible, pre-populated with everything the system already
+knows. Both fulfill the same functional requirements. Only one is usable.
+
+If the actual UI looks like it was built by someone who wanted to check a box rather than
+solve a problem, say so — directly, specifically, with the evidence. "The Projects section
+presents four entity creation forms simultaneously on one page. The primary use case of this
+system is executing tasks, not creating them. The hero surface should be task execution; what
+was built is a DBMS administration form. This is not a missing feature — it is an incorrect
+design." That is a better finding than any checklist item will produce.
+
+---
+
 ## Analysis Posture — Default to "This Is Bad"
 
-When asked to analyze an existing UI, the default verdict is **"this UI does not meet baseline
-usability requirements"** unless it demonstrably clears every item in the checklist below.
-Optimistic assessments are harmful. "Mostly built out" or "mostly functional" are not
-acceptable conclusions — they create false confidence and delay real fixes. Err on the side
-of calling things broken. If you are not sure whether something is broken, it is broken.
+When asked to analyze an existing UI, the default verdict is **"this UI does not meet
+requirements"** unless it demonstrably clears every item in the checklist below AND the
+first-principles reasoning above produces no obvious design failures. Optimistic assessments
+are harmful. "Mostly built out" or "mostly functional" are not acceptable conclusions — they
+create false confidence and delay real fixes. Err on the side of calling things broken.
+If you are not sure whether something is broken, it is broken.
 
 ### Baseline criteria (all required — no partial credit)
 
@@ -271,14 +337,22 @@ Only declare the UI complete when every workflow on the approved list has passed
 
 ## Rules
 
+- **Start with first principles reasoning (Step 0), always.** Analysis that skips Step 0 and
+  goes straight to the checklist will miss the most important findings.
+- **If you are not finding obvious problems quickly, change your angle.** Ask: "What is this
+  system for and is the UI built for that?" not "which checklist items are unchecked?"
+- The checklist finds the confirmable failures. First principles finds the design failures.
+  Both are required. Neither replaces the other.
 - Never start coding before the workflow list is approved
 - Never move to the next workflow before the current one is verified
 - Empty and error states are not optional — they are part of every workflow
 - If Playwright verification is ambiguous or blocked, ask the user — do not resolve it unilaterally
 - Do not ship placeholder data, stub interactions, or console.log-driven "verification"
 - Framework agnostic — follow whatever stack is already in use; for greenfield, ask the user
-- "Mostly working" is not working. A workflow that requires the user to copy/paste IDs, manually
-  sync state between sections, or work around missing fields is **broken**, not "mostly working."
+- "Mostly working" is not working. A workflow that requires the user to copy/paste IDs,
+  manually sync state between sections, or work around missing fields is **broken**.
+- A UI that fulfills all functional requirements but is organized around the system's data
+  model rather than the user's mental model is a bad UI. Say so.
 
 ---
 
