@@ -1,163 +1,493 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Work Manager</title>
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #f3f4f6; --surface: #ffffff; --sidebar-bg: #f8f9fa; --border: #e5e7eb;
-    --text: #111827; --text-muted: #6b7280; --accent: #2563eb; --accent-hover: #1d4ed8;
-    --danger: #dc2626; --tag-bg: #dbeafe; --tag-text: #1e40af; --archived-bg: #fef9c3;
-    --archived-text: #854d0e; --card-hover: #f0f4ff; --card-selected: #eff6ff;
-    --success-bg: #dcfce7; --success-text: #166534; --warning-bg: #fef3c7; --warning-text: #92400e;
-  }
-  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-  nav { display: flex; align-items: center; justify-content: space-between; padding: .6rem 1.2rem; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; gap: .75rem; }
-  nav .brand { font-weight: 700; font-size: 1.05rem; color: var(--accent); white-space: nowrap; }
-  nav .nav-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
-  nav .count { font-size: .8rem; color: var(--text-muted); }
-  .layout { display: flex; flex: 1; overflow: hidden; }
-  .sidebar { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--sidebar-bg); border-right: 1px solid var(--border); overflow: hidden; }
-  .sidebar-top { padding: .75rem; display: flex; flex-direction: column; gap: .5rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-  .search-row, .filter-row { display: flex; gap: .4rem; }
-  .sidebar-list { flex: 1; overflow-y: auto; padding: .4rem; }
-  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-  .main-content { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
-  .empty-state, .empty-list { text-align: center; padding: 2rem 1rem; color: var(--text-muted); font-size: .85rem; }
-  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
-  .panel h2, .panel h3 { margin-bottom: .75rem; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
-  .tree-item, .list-card { padding: .65rem .75rem; border-radius: 6px; cursor: pointer; margin-bottom: .3rem; border: 1px solid transparent; transition: background .12s, border-color .12s; background: var(--surface); }
-  .tree-item:hover, .list-card:hover { background: var(--card-hover); border-color: var(--border); }
-  .selected { background: var(--card-selected); border-color: var(--accent); }
-  .tree-children { margin-left: 1rem; border-left: 1px dashed var(--border); padding-left: .6rem; }
-  .item-title { font-weight: 600; font-size: .9rem; margin-bottom: .25rem; }
-  .muted { color: var(--text-muted); font-size: .8rem; }
-  .badge { display: inline-flex; padding: 0 8px; border-radius: 999px; font-size: .72rem; background: var(--tag-bg); color: var(--tag-text); margin-right: .25rem; }
-  .badge.complete { background: var(--success-bg); color: var(--success-text); }
-  .badge.blocked, .badge.sev1 { background: #fee2e2; color: #991b1b; }
-  .badge.in_progress, .badge.in_review, .badge.sev2 { background: var(--warning-bg); color: var(--warning-text); }
-  .badge.abandoned, .badge.sev3 { background: #e5e7eb; color: #374151; }
-  .tag { padding: 0 6px; border-radius: 999px; font-size: .7rem; background: var(--tag-bg); color: var(--tag-text); }
-  .tag-chip { cursor: pointer; padding: 1px 8px; border-radius: 999px; font-size: .75rem; background: var(--border); color: var(--text-muted); border: 1px solid transparent; }
-  .tag-chip.active { background: var(--tag-bg); color: var(--tag-text); border-color: var(--accent); }
-  .tag-cloud, .row-wrap { display: flex; flex-wrap: wrap; gap: .3rem; }
-  input[type="text"], input[type="search"], input[type="url"], select, textarea { width: 100%; padding: .45rem .65rem; border: 1px solid var(--border); border-radius: 5px; font-size: .88rem; font-family: inherit; background: var(--surface); color: var(--text); outline: none; transition: border-color .15s; }
-  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
-  textarea { resize: vertical; min-height: 120px; font-size: .85rem; line-height: 1.5; }
-  button { cursor: pointer; border: none; border-radius: 5px; padding: .4rem .85rem; font-size: .85rem; font-family: inherit; font-weight: 500; transition: all .15s; }
-  .btn-primary { background: var(--accent); color: #fff; }
-  .btn-primary:hover { background: var(--accent-hover); }
-  .btn-secondary { background: var(--border); color: var(--text); }
-  .btn-secondary:hover { background: #d1d5db; }
-  .btn-danger { background: #fee2e2; color: var(--danger); }
-  .btn-warning { background: var(--warning-bg); color: var(--warning-text); }
-  .btn-sm { padding: .3rem .65rem; font-size: .8rem; }
-  .field { display: flex; flex-direction: column; gap: .3rem; }
-  .field-label { font-size: .82rem; font-weight: 600; color: var(--text-muted); }
-  .editor-actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
-  .error-banner { background: #fee2e2; color: #991b1b; padding: .5rem 1rem; font-size: .85rem; border-bottom: 1px solid #fecaca; display: flex; justify-content: space-between; align-items: center; }
-  .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: #1e293b; color: #fff; padding: .6rem 1.1rem; border-radius: 6px; font-size: .85rem; z-index: 100; }
-  .warning { background: var(--warning-bg); color: var(--warning-text); padding: .75rem; border-radius: 6px; border: 1px solid #fde68a; }
-  .danger-box { background: #fee2e2; color: #991b1b; padding: .75rem; border-radius: 6px; border: 1px solid #fecaca; }
-  .markdown { line-height: 1.6; }
-  .markdown h1, .markdown h2, .markdown h3 { margin: 1rem 0 .5rem; }
-  .markdown ul { padding-left: 1.2rem; }
-  .markdown pre { background: #f9fafb; border: 1px solid var(--border); border-radius: 6px; padding: .75rem; white-space: pre-wrap; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Work Manager</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/lib/marked.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --sidebar-bg: #13161e; --border: #2a2d3a;
+      --text: #e8eaf0; --text-muted: #7c8091; --accent: #4f8ef7; --accent-hover: #3b7af0;
+      --danger: #f87171; --tag-bg: #1e2a45; --tag-text: #93c5fd;
+      --success-bg: #14281e; --success-text: #4ade80; --warning-bg: #2a2010; --warning-text: #fbbf24;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    [x-cloak] { display: none !important; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    button, input, select, textarea {
+      font: inherit;
+    }
+    button {
+      cursor: pointer;
+    }
+    .app-shell {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.875rem 1.25rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    .brand {
+      font-weight: 700;
+      font-size: 1.1rem;
+      white-space: nowrap;
+    }
+    .topnav {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .nav-btn, .filter-btn, .ghost-btn, .primary-btn, .danger-btn, .accordion-btn, .link-btn, .icon-btn {
+      border: 1px solid var(--border);
+      border-radius: 0.65rem;
+      background: var(--surface);
+      color: var(--text);
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    .nav-btn, .filter-btn, .ghost-btn, .primary-btn, .danger-btn, .link-btn {
+      padding: 0.55rem 0.85rem;
+    }
+    .nav-btn.active, .filter-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .nav-btn:hover, .filter-btn:hover, .ghost-btn:hover, .primary-btn:hover, .danger-btn:hover, .link-btn:hover, .icon-btn:hover {
+      border-color: var(--accent);
+    }
+    .primary-btn {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .primary-btn:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+    .danger-btn {
+      color: var(--danger);
+      border-color: rgba(248, 113, 113, 0.25);
+    }
+    .danger-btn:hover {
+      background: rgba(248, 113, 113, 0.1);
+      border-color: rgba(248, 113, 113, 0.5);
+    }
+    .icon-btn {
+      width: 2rem;
+      height: 2rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 340px minmax(0, 1fr);
+      min-height: calc(100vh - 70px);
+    }
+    .sidebar {
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      padding: 1rem;
+      overflow: auto;
+    }
+    .main {
+      padding: 1.25rem;
+      overflow: auto;
+    }
+    .sidebar-header, .panel-header, .modal-header, .toolbar, .row-between {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .sidebar-header {
+      margin-bottom: 1rem;
+    }
+    .sidebar-title {
+      margin: 0;
+      font-size: 1rem;
+    }
+    .sidebar-controls, .filter-group, .toolbar, .inline-actions, .tag-list, .badge-list, .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .sidebar-section {
+      margin-bottom: 1rem;
+    }
+    .sidebar-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .list-item, .tree-item, .linked-card, .info-card, .card, .empty-state, .alert, .toast, .accordion-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 0.9rem;
+    }
+    .list-item {
+      padding: 0.85rem;
+      text-align: left;
+      width: 100%;
+    }
+    .list-item.active, .tree-name.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+    }
+    .list-item-title, .tree-name, .linked-title {
+      font-weight: 600;
+    }
+    .muted {
+      color: var(--text-muted);
+    }
+    .small {
+      font-size: 0.875rem;
+    }
+    .tiny {
+      font-size: 0.78rem;
+    }
+    .meta-line {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 0.35rem;
+    }
+    .status-badge, .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .tag {
+      background: var(--tag-bg);
+      color: var(--tag-text);
+    }
+    .status-draft, .status-open, .status-deprecated {
+      background: var(--warning-bg);
+      color: var(--warning-text);
+    }
+    .status-ready, .status-active, .status-validated, .status-resolved, .status-complete {
+      background: var(--success-bg);
+      color: var(--success-text);
+    }
+    .status-in_progress, .status-in_review, .status-investigating {
+      background: var(--tag-bg);
+      color: var(--tag-text);
+    }
+    .status-blocked, .status-abandoned, .status-on_hold {
+      background: rgba(248, 113, 113, 0.12);
+      color: var(--danger);
+    }
+    .panel {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .card, .accordion-panel, .empty-state, .alert {
+      padding: 1rem;
+    }
+    .panel-header {
+      margin-bottom: 0.75rem;
+    }
+    .breadcrumbs {
+      display: flex;
+      gap: 0.35rem;
+      align-items: center;
+      flex-wrap: wrap;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+    .breadcrumbs button {
+      border: none;
+      background: transparent;
+      color: var(--accent);
+      padding: 0;
+    }
+    .grid {
+      display: grid;
+      gap: 0.9rem;
+    }
+    .grid-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+    input:not([type=checkbox]):not([type=radio]), select, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 0.7rem;
+      background: var(--surface);
+      color: var(--text);
+      padding: 0.7rem 0.8rem;
+    }
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+    .form-help {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 400;
+    }
+    .required::after {
+      content: " *";
+      color: var(--danger);
+    }
+    .accordion-btn {
+      width: 100%;
+      padding: 0.85rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 600;
+    }
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+    }
+    .linked-card {
+      padding: 0.8rem;
+    }
+    .linked-card-header, .tree-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .tree-row {
+      margin-bottom: 0.35rem;
+    }
+    .tree-item {
+      padding: 0.65rem;
+    }
+    .tree-children {
+      margin-left: 1.1rem;
+      padding-left: 0.6rem;
+      border-left: 1px solid var(--border);
+    }
+    .tree-name {
+      flex: 1;
+      border: 1px solid transparent;
+      border-radius: 0.6rem;
+      background: transparent;
+      text-align: left;
+      padding: 0.35rem 0.45rem;
+    }
+    .accordion-content {
+      margin-top: 0.9rem;
+    }
+    .preview {
+      padding: 1rem;
+      border-radius: 0.8rem;
+      border: 1px solid var(--border);
+      background: var(--sidebar-bg);
+      overflow: auto;
+    }
+    .preview :first-child {
+      margin-top: 0;
+    }
+    .preview :last-child {
+      margin-bottom: 0;
+    }
+    .empty-state {
+      text-align: center;
+      color: var(--text-muted);
+    }
+    .alert.error {
+      background: rgba(248, 113, 113, 0.1);
+      color: var(--danger);
+      border-color: rgba(248, 113, 113, 0.25);
+    }
+    .alert.info {
+      background: rgba(79, 142, 247, 0.1);
+      color: var(--tag-text);
+      border-color: rgba(79, 142, 247, 0.2);
+    }
+    .toast-stack {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      z-index: 50;
+      max-width: min(420px, calc(100vw - 2rem));
+    }
+    .toast {
+      padding: 0.85rem 1rem;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+    }
+    .toast.success {
+      background: var(--success-bg);
+      color: var(--success-text);
+      border-color: rgba(74, 222, 128, 0.2);
+    }
+    .toast.error {
+      background: rgba(248, 113, 113, 0.12);
+      color: var(--danger);
+      border-color: rgba(248, 113, 113, 0.25);
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 40;
+    }
+    .modal {
+      width: min(820px, 100%);
+      max-height: calc(100vh - 2rem);
+      overflow: auto;
+      background: var(--surface);
+      border-radius: 1rem;
+      border: 1px solid var(--border);
+      padding: 1rem;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+    }
+    .modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .error-text {
+      color: var(--danger);
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    .spacer-top {
+      margin-top: 0.75rem;
+    }
+    @media (max-width: 1100px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+      .grid-2, .grid-3 {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
-<body x-data="app()" x-init="init()">
-<div x-show="error" class="error-banner" x-cloak>
-  <span x-text="error"></span>
-  <button @click="error=null" class="btn-secondary btn-sm">✕</button>
-</div>
-<nav>
-  <span class="brand">🧰 Work Manager</span>
-  <span class="nav-actions">
-    <template x-for="section in sections" :key="section.key">
-      <button class="btn-secondary btn-sm" :class="{'btn-primary': activeSection === section.key}" @click="activeSection = section.key" x-text="section.label"></button>
-    </template>
-    <span class="count" x-text="selectedTaskSlug ? ('Selected: ' + selectedTaskSlug) : 'Ready'"></span>
-  </span>
-</nav>
-<div class="layout">
-  <aside class="sidebar">
-    <div class="sidebar-top" x-show="activeSection === 'projects'">
-      <button class="btn-primary btn-sm" @click="refreshProjects">Refresh hierarchy</button>
-      <div class="muted">Project → Epic → Task → Subtask</div>
-    </div>
-    <div class="sidebar-top" x-show="activeSection === 'notes'">
-      <div class="search-row">
-        <input type="search" x-model="noteSearch" @input.debounce.300ms="fetchNotes" placeholder="Search notes…">
-        <select x-model="noteSearchMode" @change="fetchNotes"><option value="text">Text</option><option value="semantic">Semantic</option></select>
-      </div>
-      <div class="tag-cloud">
-        <template x-for="tag in noteTags" :key="tag"><span class="tag-chip" :class="{active: noteFilterTag === tag}" @click="noteFilterTag = noteFilterTag === tag ? '' : tag; fetchNotes()" x-text="tag"></span></template>
-      </div>
-      <label class="muted"><input type="checkbox" x-model="showArchivedNotes" @change="fetchNotes"> Show archived</label>
-    </div>
-    <div class="sidebar-top" x-show="activeSection === 'design_docs'">
-      <button class="btn-primary btn-sm" @click="fetchDesignDocs">Refresh docs</button>
-    </div>
-    <div class="sidebar-top" x-show="activeSection === 'issues'">
-      <div class="filter-row">
-        <select x-model="issueStatus" @change="fetchIssues"><option value="">All status</option><option value="open">Open</option><option value="resolved">Resolved</option></select>
-        <select x-model="issueSeverity" @change="fetchIssues"><option value="">All severity</option><option value="sev1">sev1</option><option value="sev2">sev2</option><option value="sev3">sev3</option></select>
-      </div>
-    </div>
-    <div class="sidebar-top" x-show="activeSection === 'runbooks'">
-      <div class="filter-row">
-        <input type="text" x-model="runbookService" @input.debounce.300ms="fetchRunbooks" placeholder="Service">
-        <input type="text" x-model="runbookCategory" @input.debounce.300ms="fetchRunbooks" placeholder="Category">
-      </div>
-      <select x-model="runbookStatus" @change="fetchRunbooks"><option value="">All status</option><option value="active">Active</option><option value="draft">Draft</option><option value="deprecated">Deprecated</option></select>
-    </div>
-    <div class="sidebar-top" x-show="activeSection === 'briefs'">
-      <input type="text" x-model="briefLookupSlug" placeholder="TASK-001">
-      <button class="btn-primary btn-sm" @click="loadBriefBySlug">Load brief</button>
-    </div>
-    <div class="sidebar-top" x-show="activeSection === 'queue'">
-      <div class="filter-row">
-        <select x-model="queueStatusFilter" @change="fetchQueue"><option value="">In-progress &amp; ready</option><option value="in_progress">In progress</option><option value="draft">Draft</option><option value="blocked">Blocked</option></select>
-      </div>
-      <button class="btn-secondary btn-sm" @click="fetchQueue">Refresh</button>
-    </div>
-    <div class="sidebar-top" x-show="activeSection === 'tool_docs'">
-      <button class="btn-secondary btn-sm" @click="fetchToolDocs">Refresh</button>
-    </div>
+<body>
+  <div class="app-shell" x-data="workManager()" x-init="init()" @keydown.escape.window="handleEscape()">
+    <header class="topbar">
+      <div class="brand">Work Manager</div>
+      <nav class="topnav" aria-label="Primary">
+        <button class="nav-btn" :class="{active: section === 'queue'}" @click="switchSection('queue')">Queue</button>
+        <button class="nav-btn" :class="{active: section === 'projects'}" @click="switchSection('projects')">Projects</button>
+        <button class="nav-btn" :class="{active: section === 'notes'}" @click="switchSection('notes')">Notes</button>
+        <button class="nav-btn" :class="{active: section === 'designDocs'}" @click="switchSection('designDocs')">Design Docs</button>
+        <button class="nav-btn" :class="{active: section === 'contextDocs'}" @click="switchSection('contextDocs')">Context Docs</button>
+        <button class="nav-btn" :class="{active: section === 'issues'}" @click="switchSection('issues')">Issues</button>
+        <button class="nav-btn" :class="{active: section === 'runbooks'}" @click="switchSection('runbooks')">Runbooks</button>
+        <button class="nav-btn" :class="{active: section === 'toolDocs'}" @click="switchSection('toolDocs')">Tool Docs</button>
+      </nav>
+    </header>
 
-    <div class="sidebar-list" x-show="activeSection === 'projects'">
-      <template x-if="projects.length === 0"><div class="empty-list">No projects yet.</div></template>
-      <template x-for="project in projects" :key="project.slug">
-        <div>
-          <div class="tree-item" :class="{selected: selection.slug === project.slug}" @click="selection = {type:'project', slug: project.slug}; project.expanded = !project.expanded; selectProject(project.slug); epicForm.project_slug = project.slug">
-            <div class="item-title"><span x-text="project.title"></span></div>
-            <div><span class="badge" :class="project.status" x-text="project.status"></span><span class="muted" x-text="project.slug"></span></div>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div>
+            <h2 class="sidebar-title" x-text="sectionTitle()"></h2>
+            <div class="muted small" x-text="sectionSubtitle()"></div>
           </div>
-          <div class="tree-children" x-show="project.expanded">
-            <template x-for="epic in project.epics" :key="epic.slug">
-              <div>
-                <div class="tree-item" :class="{selected: selection.slug === epic.slug}" @click="selection = {type:'epic', slug: epic.slug, project: project.slug}; epic.expanded = !epic.expanded; selectEpic(epic.slug); taskForm.epic_slug = epic.slug">
-                  <div class="item-title" x-text="epic.title"></div>
-                  <div><span class="badge" :class="epic.status" x-text="epic.status"></span><span class="muted" x-text="epic.slug"></span></div>
+          <button class="primary-btn" @click="openCreateForSection()" x-text="sectionCreateLabel()"></button>
+        </div>
+
+        <template x-if="section === 'queue'">
+          <div class="stack">
+            <div class="sidebar-section filter-group">
+              <template x-for="filter in queueFilters" :key="filter.value">
+                <button class="filter-btn" :class="{active: queueFilter === filter.value}" @click="setQueueFilter(filter.value)" x-text="filter.label"></button>
+              </template>
+            </div>
+            <div class="sidebar-list" x-show="!loadingList">
+              <template x-for="task in queueTasks" :key="task.slug">
+                <button class="list-item" :class="{active: selectedTask && selectedTask.slug === task.slug && section === 'queue'}" @click="loadTaskDetail(task.slug)">
+                  <div class="list-item-title" x-text="task.title"></div>
+                  <div class="meta-line">
+                    <span class="status-badge" :class="statusClass(task.status)" x-text="formatStatus(task.status)"></span>
+                    <span class="small muted" x-text="task.epic_slug || 'No epic'"></span>
+                  </div>
+                </button>
+              </template>
+              <div class="empty-state" x-show="!queueTasks.length && !loadingList">
+                No tasks match this queue filter.
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="section === 'projects'">
+          <div class="stack">
+            <label class="filter-toggle" style="display:flex;align-items:center;gap:6px;padding:4px 0 6px;font-size:0.8rem;color:var(--muted);cursor:pointer;">
+              <input type="checkbox" x-model="showArchivedProjects" style="cursor:pointer;" />
+              Show archived
+            </label>
+            <template x-for="project in projects.filter(p => showArchivedProjects || !p.archived_at)" :key="project.slug">
+              <div class="tree-item">
+                <div class="tree-row">
+                  <button class="icon-btn" @click="toggleProject(project.slug)" :aria-label="expandedProjects[project.slug] ? 'Collapse project' : 'Expand project'">
+                    <span x-text="expandedProjects[project.slug] ? '▾' : '▸'"></span>
+                  </button>
+                  <button class="tree-name" :class="{active: selectedProject && selectedProject.slug === project.slug && !selectedEpic && !selectedTask}" @click="selectProject(project)">
+                    <span x-text="project.title"></span>
+                  </button>
                 </div>
-                <div class="tree-children" x-show="epic.expanded">
-                  <template x-for="task in epic.tasks" :key="task.slug">
-                    <div>
-                      <div class="tree-item" :class="{selected: selection.slug === task.slug}" @click="selectTask(task.slug)">
-                        <div class="item-title" x-text="task.title"></div>
-                        <div><span class="badge" :class="task.status" x-text="task.status"></span><span class="muted" x-text="task.slug"></span></div>
+                <div class="tree-children" x-show="expandedProjects[project.slug]">
+                  <template x-for="epic in (project.epics || [])" :key="epic.slug">
+                    <div class="spacer-top">
+                      <div class="tree-row">
+                        <button class="icon-btn" @click="toggleEpic(epic.slug)" :aria-label="expandedEpics[epic.slug] ? 'Collapse epic' : 'Expand epic'">
+                          <span x-text="expandedEpics[epic.slug] ? '▾' : '▸'"></span>
+                        </button>
+                        <button class="tree-name" :class="{active: selectedEpic && selectedEpic.slug === epic.slug && !selectedTask}" @click="selectEpic(project, epic)">
+                          <span x-text="epic.title"></span>
+                        </button>
                       </div>
-                      <div class="tree-children">
-                        <template x-for="subtask in task.subtasks" :key="subtask.slug">
-                          <div class="tree-item" :class="{selected: selection.slug === subtask.slug}" @click="selection = {type:'subtask', slug: subtask.slug, task: task.slug}">
-                            <div class="item-title" x-text="subtask.title"></div>
-                            <div><span class="badge" :class="subtask.status" x-text="subtask.status"></span><span class="muted" x-text="subtask.slug"></span></div>
-                          </div>
+                      <div class="tree-children" x-show="expandedEpics[epic.slug]">
+                        <template x-for="task in (epic.tasks || [])" :key="task.slug">
+                          <button class="tree-name spacer-top" :class="{active: selectedTask && selectedTask.slug === task.slug && section === 'projects'}" @click="selectProjectTask(project, epic, task)">
+                            <span x-text="task.title"></span>
+                          </button>
                         </template>
                       </div>
                     </div>
@@ -165,793 +495,2190 @@
                 </div>
               </div>
             </template>
+            <div class="empty-state" x-show="!projects.filter(p => showArchivedProjects || !p.archived_at).length && !loadingList" x-text="projects.length && !showArchivedProjects ? 'All projects are archived. Check \'Show archived\' to view them.' : 'No projects yet. Create the first one.'"></div>
           </div>
-        </div>
-      </template>
-    </div>
-
-    <div class="sidebar-list" x-show="activeSection === 'notes'">
-      <template x-if="notes.length === 0"><div class="empty-list">No notes found.</div></template>
-      <template x-for="note in notes" :key="note.slug">
-        <div class="list-card" :class="{selected: selection.slug === note.slug}" @click="selection = {type:'note', slug: note.slug}; noteForm = {...note, tagsText: (note.tags || []).join(', ')}">
-          <div class="item-title" x-text="note.title"></div>
-          <div class="row-wrap"><template x-for="tag in note.tags || []" :key="tag"><span class="tag" x-text="tag"></span></template></div>
-          <div class="muted" x-text="note.slug"></div>
-        </div>
-      </template>
-    </div>
-
-    <div class="sidebar-list" x-show="activeSection === 'design_docs'">
-      <template x-if="designDocs.length === 0"><div class="empty-list">No design docs yet.</div></template>
-      <template x-for="doc in designDocs" :key="doc.slug">
-        <div class="list-card" :class="{selected: selection.slug === doc.slug}" @click="selectDesignDoc(doc)">
-          <div class="item-title" x-text="doc.title"></div>
-          <div class="muted" x-text="doc.slug"></div>
-        </div>
-      </template>
-    </div>
-
-    <div class="sidebar-list" x-show="activeSection === 'issues'">
-      <template x-if="issues.length === 0"><div class="empty-list">No issues found.</div></template>
-      <template x-for="issue in issues" :key="issue.slug">
-        <div class="list-card" :class="{selected: selection.slug === issue.slug}" @click="selection = {type:'issue', slug: issue.slug}; issueForm = {...issue, task_slug: issue.linked_task_slug || ''}">
-          <div class="item-title" x-text="issue.title"></div>
-          <div><span class="badge" :class="issue.status" x-text="issue.status"></span><span class="badge" :class="issue.severity" x-text="issue.severity"></span></div>
-          <div class="muted" x-text="issue.slug"></div>
-        </div>
-      </template>
-    </div>
-
-    <div class="sidebar-list" x-show="activeSection === 'runbooks'">
-      <template x-if="runbooks.length === 0"><div class="empty-list">No runbooks found.</div></template>
-      <template x-for="runbook in runbooks" :key="runbook.slug">
-        <div class="list-card" :class="{selected: selection.slug === runbook.slug}" @click="selection = {type:'runbook', slug: runbook.slug}; runbookForm = {...runbook, linked_issue_ids_text: (runbook.linked_issue_ids || []).join(', ')}">
-          <div class="item-title" x-text="runbook.title"></div>
-          <div><span class="badge" :class="runbook.status" x-text="runbook.status"></span><span class="muted" x-text="runbook.service + ' / ' + runbook.category"></span></div>
-        </div>
-      </template>
-    </div>
-
-    <div class="sidebar-list" x-show="activeSection === 'queue'">
-      <template x-if="queueTasks.length === 0"><div class="empty-list">No active or ready tasks.</div></template>
-      <template x-for="t in queueTasks" :key="t.slug">
-        <div class="list-card" :class="{selected: selection.slug === t.slug}" @click="selectTask(t.slug)">
-          <div class="item-title" x-text="t.title"></div>
-          <div><span class="badge" :class="t.status" x-text="t.status"></span><span class="muted" x-text="t.slug"></span></div>
-          <div class="muted" x-show="t.assignee" x-text="'→ ' + t.assignee"></div>
-        </div>
-      </template>
-    </div>
-
-    <div class="sidebar-list" x-show="activeSection === 'tool_docs'">
-      <template x-if="toolDocs.length === 0"><div class="empty-list">No tool doc sources yet.</div></template>
-      <template x-for="d in toolDocs" :key="d.slug">
-        <div class="list-card" :class="{selected: selection.slug === d.slug}" @click="selection = {type:'tool_doc', slug: d.slug}; toolDocForm = {title: d.title, repo_url: d.repo_url, tagsText: (d.tags||[]).join(', ')}">
-          <div class="item-title" x-text="d.title"></div>
-          <div class="muted" x-text="d.slug"></div>
-          <div class="muted" x-text="d.repo_url"></div>
-        </div>
-      </template>
-    </div>
-
-    <div class="sidebar-list" x-show="activeSection === 'briefs'">
-      <template x-if="selectedBrief && selectedBrief.task">
-        <div class="list-card selected">
-          <div class="item-title" x-text="selectedBrief.task.title"></div>
-          <div><span class="badge" :class="selectedBrief.task.status" x-text="selectedBrief.task.status"></span><span class="muted" x-text="selectedTaskSlug"></span></div>
-        </div>
-      </template>
-      <template x-if="!selectedBrief"><div class="empty-list">Select a task to view a brief.</div></template>
-    </div>
-  </aside>
-
-  <main class="main">
-    <div class="main-content" x-show="activeSection === 'projects'">
-      <div class="grid">
-        <div class="panel">
-          <h2>Create Project</h2>
-          <div class="field"><span class="field-label">Title</span><input type="text" x-model="projectForm.title"></div>
-          <div class="field"><span class="field-label">Goal</span><textarea x-model="projectForm.goal"></textarea></div>
-          <div class="field"><span class="field-label">Description</span><textarea x-model="projectForm.description"></textarea></div>
-          <div class="editor-actions"><button class="btn-primary" @click="createProject">Create project</button></div>
-        </div>
-        <div class="panel">
-          <h2>Create Epic</h2>
-          <div class="field"><span class="field-label">Project slug</span><input type="text" x-model="epicForm.project_slug" placeholder="PROJECT-001"></div>
-          <div class="field"><span class="field-label">Title</span><input type="text" x-model="epicForm.title"></div>
-          <div class="field"><span class="field-label">Description</span><textarea x-model="epicForm.description"></textarea></div>
-          <div class="editor-actions"><button class="btn-primary" @click="createEpic">Create epic</button></div>
-        </div>
-        <div class="panel">
-          <h2>Create Task</h2>
-          <div class="field"><span class="field-label">Epic slug</span><input type="text" x-model="taskForm.epic_slug" placeholder="EPIC-001"></div>
-          <div class="field"><span class="field-label">Title</span><input type="text" x-model="taskForm.title"></div>
-          <div class="field"><span class="field-label">Description</span><textarea x-model="taskForm.description"></textarea></div>
-          <div class="field"><span class="field-label">Assignee</span><input type="text" x-model="taskForm.assignee"></div>
-          <div class="field"><span class="field-label">Effort</span><select x-model="taskForm.estimated_effort"><option value="">--</option><option>xs</option><option>s</option><option>m</option><option>l</option><option>xl</option></select></div>
-          <div class="editor-actions"><button class="btn-primary" @click="createTask">Create task</button></div>
-        </div>
-        <div class="panel">
-          <h2>Create Subtask</h2>
-          <div class="field"><span class="field-label">Task slug</span><input type="text" x-model="subtaskForm.task_slug" placeholder="TASK-001"></div>
-          <div class="field"><span class="field-label">Title</span><input type="text" x-model="subtaskForm.title"></div>
-          <div class="field"><span class="field-label">Description</span><textarea x-model="subtaskForm.description"></textarea></div>
-          <div class="editor-actions"><button class="btn-primary" @click="createSubtask">Create subtask</button></div>
-        </div>
-      </div>
-      <div class="panel" x-show="selection.type === 'project' && projectDetail">
-        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
-          <h2 x-text="projectDetail?.title" style="margin:0;flex:1;min-width:0"></h2>
-          <select :value="projectDetail?.status" @change="updateProjectStatus($event.target.value)" style="font-size:.85rem;padding:.3rem .6rem">
-            <option>draft</option><option>in_progress</option><option>blocked</option><option>complete</option><option>abandoned</option>
-          </select>
-        </div>
-        <div class="field" style="margin-bottom:.75rem"><span class="field-label">Goal</span><textarea x-model="projectEditForm.goal" style="min-height:60px"></textarea></div>
-        <div class="field" style="margin-bottom:.75rem"><span class="field-label">Description</span><textarea x-model="projectEditForm.description"></textarea></div>
-        <div class="field" style="margin-bottom:.75rem"><span class="field-label">Tags (comma-separated)</span><input type="text" x-model="projectEditForm.tagsText"></div>
-        <div class="field" x-show="projectDetail?.status === 'blocked'" style="margin-bottom:.75rem"><span class="field-label">Blocked reason</span><input type="text" x-model="projectEditForm.blocked_reason"></div>
-        <div class="editor-actions"><button class="btn-primary" @click="saveProjectEdit">Save project</button></div>
-      </div>
-
-      <div class="panel" x-show="selection.type === 'epic' && epicDetail.epic">
-        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
-          <h2 x-text="epicDetail.epic?.title" style="margin:0;flex:1;min-width:0"></h2>
-          <select :value="epicDetail.epic?.status" @change="updateEpicStatus($event.target.value)" style="font-size:.85rem;padding:.3rem .6rem">
-            <option>draft</option><option>in_progress</option><option>blocked</option><option>complete</option><option>abandoned</option>
-          </select>
-        </div>
-        <div class="field" style="margin-bottom:.75rem"><span class="field-label">Description</span><textarea x-model="epicEditForm.description"></textarea></div>
-        <div class="field" style="margin-bottom:.75rem"><span class="field-label">Tags (comma-separated)</span><input type="text" x-model="epicEditForm.tagsText"></div>
-        <div class="field" x-show="epicDetail.epic?.status === 'blocked'" style="margin-bottom:.75rem"><span class="field-label">Blocked reason</span><input type="text" x-model="epicEditForm.blocked_reason"></div>
-        <div class="editor-actions" style="margin-bottom:1rem"><button class="btn-primary" @click="saveEpicEdit">Save epic</button></div>
-        <h3 style="margin-bottom:.5rem">Linked Design Docs</h3>
-        <template x-if="epicDetail.designDocs.length === 0"><p class="muted" style="font-size:.85rem">No design docs linked.</p></template>
-        <template x-for="doc in epicDetail.designDocs" :key="doc.slug">
-          <div class="list-card" style="margin-bottom:.3rem"><div class="item-title" x-text="doc.title"></div><div class="muted" x-text="doc.slug"></div></div>
         </template>
-      </div>
-      <div class="panel" x-show="selection.type === 'task' && taskDetail.task">
-        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem;flex-wrap:wrap">
-          <h2 x-text="taskDetail.task?.title" style="margin:0;flex:1;min-width:0"></h2>
-          <select :value="taskDetail.task?.status" @change="updateTaskStatus($event.target.value)" style="font-size:.85rem;padding:.3rem .6rem">
-            <option>draft</option><option>ready</option><option>in_progress</option><option>in_review</option><option>complete</option><option>blocked</option><option>abandoned</option>
-          </select>
-          <button class="btn-secondary btn-sm" @click="activeSection='briefs'; selectedTaskSlug=selection.slug; loadBriefBySlug(selection.slug)">View Brief</button>
-        </div>
 
-        <details style="margin-bottom:1.5rem">
-          <summary style="cursor:pointer;font-weight:600;font-size:.9rem;margin-bottom:.5rem">Edit Task Fields</summary>
-          <div style="margin-top:.75rem;display:flex;flex-direction:column;gap:.6rem">
-            <div class="field"><span class="field-label">Title</span><input type="text" x-model="taskEditForm.title"></div>
-            <div class="field"><span class="field-label">Description</span><textarea x-model="taskEditForm.description" style="min-height:80px"></textarea></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
-              <div class="field"><span class="field-label">Assignee</span><input type="text" x-model="taskEditForm.assignee"></div>
-              <div class="field"><span class="field-label">Effort</span><select x-model="taskEditForm.estimated_effort"><option value="">--</option><option>xs</option><option>s</option><option>m</option><option>l</option><option>xl</option></select></div>
-            </div>
-            <div class="field"><span class="field-label">Tags (comma-separated, for note matching)</span><input type="text" x-model="taskEditForm.tagsText"></div>
-            <div class="field" x-show="taskDetail.task?.status === 'blocked'"><span class="field-label">Blocked reason</span><input type="text" x-model="taskEditForm.blocked_reason"></div>
-            <div class="editor-actions"><button class="btn-primary" @click="saveTaskEdit">Save changes</button></div>
-          </div>
-        </details>
-
-        <div style="margin-bottom:1.5rem">
-          <h3 style="margin-bottom:.5rem">Acceptance Criteria</h3>
-          <template x-for="c in taskDetail.criteria" :key="c.id">
-            <div style="display:flex;align-items:flex-start;gap:.5rem;margin:.4rem 0">
-              <input type="checkbox" :checked="c.verified" @change="toggleCriterion(c.id, $event.target.checked)" style="margin-top:.2rem">
-              <span :style="c.verified ? 'text-decoration:line-through;opacity:.55' : ''" x-text="c.description"></span>
-            </div>
-          </template>
-          <p class="muted" x-show="taskDetail.criteria.length === 0" style="font-size:.85rem;margin:.25rem 0">No criteria yet.</p>
-          <div style="display:flex;gap:.5rem;margin-top:.6rem">
-            <input type="text" x-model="newCriterion" placeholder="Add acceptance criterion…" style="flex:1" @keydown.enter="addCriterion">
-            <button class="btn-secondary btn-sm" @click="addCriterion">Add</button>
-          </div>
-        </div>
-
-        <div style="margin-bottom:1.5rem">
-          <h3 style="margin-bottom:.5rem">Testing Layers</h3>
-          <template x-for="t in taskDetail.testingLayers" :key="t.id">
-            <div style="display:flex;align-items:center;gap:.5rem;margin:.4rem 0;flex-wrap:wrap">
-              <span class="badge" x-text="t.layer"></span>
-              <span style="flex:1;min-width:0" x-text="t.description"></span>
-              <select :value="t.status" @change="updateTestingLayerStatus(t.id, $event.target.value)" style="font-size:.8rem;padding:.2rem .4rem">
-                <option>pending</option><option>passed</option><option>failed</option><option>skipped</option>
-              </select>
-            </div>
-          </template>
-          <p class="muted" x-show="taskDetail.testingLayers.length === 0" style="font-size:.85rem;margin:.25rem 0">No testing layers yet.</p>
-          <div style="display:flex;gap:.5rem;margin-top:.6rem;flex-wrap:wrap">
-            <select x-model="newTestingLayer.layer" style="font-size:.85rem;padding:.3rem .5rem">
-              <option>unit</option><option>integration</option><option>e2e</option><option>manual</option><option>observability</option>
-            </select>
-            <input type="text" x-model="newTestingLayer.description" placeholder="Testing layer description…" style="flex:1;min-width:12rem" @keydown.enter="addTestingLayer">
-            <button class="btn-secondary btn-sm" @click="addTestingLayer">Add</button>
-          </div>
-        </div>
-
-        <div style="margin-bottom:1.5rem">
-          <h3 style="margin-bottom:.5rem">Definition of Done</h3>
-          <textarea x-model="taskDetail.dod.dod_description" placeholder="Describe what 'done' means for this task…" style="min-height:100px"></textarea>
-          <div class="editor-actions" style="margin-top:.5rem"><button class="btn-primary" @click="saveDoD">Save DoD</button></div>
-        </div>
-
-        <div x-show="taskIssues.length > 0">
-          <h3 style="margin-bottom:.5rem">Linked Issues</h3>
-          <template x-for="issue in taskIssues" :key="issue.slug">
-            <div class="list-card" style="margin-bottom:.3rem" @click="activeSection='issues'; selection={type:'issue',slug:issue.slug}; issueForm={...issue,task_slug:issue.linked_task_slug||''}">
-              <div style="display:flex;align-items:center;gap:.5rem">
-                <span class="badge" :class="issue.severity" x-text="issue.severity"></span>
-                <span class="badge" :class="issue.status" x-text="issue.status"></span>
-                <span class="item-title" style="margin:0" x-text="issue.title"></span>
+        <template x-if="section === 'notes'">
+          <div class="stack">
+            <div class="sidebar-section stack">
+              <label>
+                Search notes
+                <input type="text" x-model="noteFilter" @keydown.enter.prevent="loadNotes()" placeholder="Title or content" />
+              </label>
+              <label>
+                Filter by tag
+                <input type="text" x-model="noteTagFilter" @keydown.enter.prevent="loadNotes()" placeholder="scope:project" />
+              </label>
+              <div class="button-group">
+                <button class="primary-btn" @click="loadNotes()">Apply</button>
+                <button class="ghost-btn" @click="noteFilter=''; noteTagFilter=''; loadNotes()">Reset</button>
               </div>
             </div>
-          </template>
-        </div>
-      </div>
-    </div>
-
-    <div class="main-content" x-show="activeSection === 'queue'">
-      <div class="panel" x-show="queueTasks.length > 0 || selection.type === 'task'">
-        <h2>Work Queue</h2>
-        <p class="muted" style="font-size:.85rem;margin-bottom:1rem">Tasks that are in-progress or ready to start, across all projects.</p>
-        <template x-for="t in queueTasks" :key="t.slug">
-          <div class="list-card" :class="{selected: selection.slug === t.slug}" @click="selectTask(t.slug); activeSection='projects'" style="margin-bottom:.5rem">
-            <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-              <span class="badge" :class="t.status" x-text="t.status"></span>
-              <span class="item-title" style="margin:0;flex:1" x-text="t.title"></span>
-              <span class="muted" x-text="t.slug"></span>
+            <div class="sidebar-list" x-show="!loadingList">
+              <template x-for="note in notes" :key="note.slug">
+                <button class="list-item" :class="{active: selectedNote && selectedNote.slug === note.slug}" @click="loadNoteDetail(note.slug)">
+                  <div class="list-item-title" x-text="note.title"></div>
+                  <div class="meta-line tag-list">
+                    <template x-for="tag in (note.tags || []).slice(0, 3)" :key="tag"><span class="tag" x-text="tag"></span></template>
+                  </div>
+                </button>
+              </template>
+              <div class="empty-state" x-show="!notes.length && !loadingList">No notes found.</div>
             </div>
-            <div class="muted" x-show="t.assignee" x-text="'Assignee: ' + t.assignee"></div>
-            <div class="muted" x-show="t.estimated_effort" x-text="'Effort: ' + t.estimated_effort"></div>
           </div>
         </template>
-      </div>
-      <div class="empty-state panel" x-show="queueTasks.length === 0">No tasks match the current filter. All caught up!</div>
-    </div>
 
-    <div class="main-content" x-show="activeSection === 'notes'">
-      <div class="panel">
-        <h2 x-text="selection.type === 'note' ? 'Edit Note' : 'Create Note'"></h2>
-        <div class="field"><span class="field-label">Title</span><input type="text" x-model="noteForm.title"></div>
-        <div class="field"><span class="field-label">Body</span><textarea x-model="noteForm.body"></textarea></div>
-        <div class="field"><span class="field-label">Tags (comma-separated)</span><input type="text" x-model="noteForm.tagsText"></div>
-        <div class="warning" x-show="!noteHasScopeTag()">At least one tag must start with <code>scope:</code>.</div>
-        <div class="editor-actions">
-          <button class="btn-primary" @click="saveNote" :disabled="!noteHasScopeTag()">Save note</button>
-          <button class="btn-warning" x-show="selection.type === 'note'" @click="archiveSelectedNote">Archive note</button>
-          <button class="btn-secondary" @click="resetNoteForm">New note</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="main-content" x-show="activeSection === 'design_docs'">
-      <div class="grid">
-        <div class="panel">
-          <h2 x-text="selection.type === 'design_doc' ? 'Edit Design Doc' : 'Create Design Doc'"></h2>
-          <div class="field"><span class="field-label">Title</span><input type="text" x-model="designDocForm.title"></div>
-          <div class="field"><span class="field-label">Tags</span><input type="text" x-model="designDocForm.tagsText" placeholder="architecture, service"></div>
-          <div class="field" x-show="selection.type !== 'design_doc'"><span class="field-label">Link to epic</span><input type="text" x-model="designDocForm.epicSlug" placeholder="EPIC-001 (optional)"></div>
-          <div class="field"><span class="field-label">Content</span><textarea x-model="designDocForm.content" style="min-height:260px"></textarea></div>
-          <div class="editor-actions">
-            <label class="btn-secondary btn-sm" style="cursor:pointer">Upload<input type="file" accept=".md,.txt" style="display:none" @change="loadDocFile"></label>
-            <button class="btn-primary" @click="saveDesignDoc">Save design doc</button>
-            <button class="btn-secondary" @click="resetDesignDocForm">New doc</button>
+        <template x-if="section === 'designDocs'">
+          <div class="stack">
+            <label>
+              Filter design docs
+              <input type="text" x-model="designDocFilter" placeholder="Search title or slug" />
+            </label>
+            <div class="sidebar-list" x-show="!loadingList">
+              <template x-for="doc in filteredDesignDocs()" :key="doc.slug">
+                <button class="list-item" :class="{active: selectedDesignDoc && selectedDesignDoc.slug === doc.slug}" @click="loadDesignDocDetail(doc.slug)">
+                  <div class="list-item-title" x-text="doc.title"></div>
+                  <div class="meta-line"><span class="small muted" x-text="doc.doc_type || 'design_doc'"></span></div>
+                </button>
+              </template>
+              <div class="empty-state" x-show="!filteredDesignDocs().length && !loadingList">No design docs match the current filter.</div>
+            </div>
           </div>
-        </div>
+        </template>
+
+        <template x-if="section === 'contextDocs'">
+          <div class="stack">
+            <label>
+              Filter context docs
+              <input type="text" x-model="contextDocFilter" placeholder="Search title or slug" />
+            </label>
+            <div class="sidebar-list" x-show="!loadingList">
+              <template x-for="doc in filteredContextDocs()" :key="doc.slug">
+                <button class="list-item" :class="{active: selectedContextDoc && selectedContextDoc.slug === doc.slug}" @click="loadContextDocDetail(doc.slug)">
+                  <div class="list-item-title" x-text="doc.title"></div>
+                  <div class="meta-line tag-list">
+                    <template x-for="tag in (doc.tags || []).slice(0, 2)" :key="tag"><span class="tag" x-text="tag"></span></template>
+                    <span class="small muted" x-show="(doc.links || []).length" x-text="(doc.links || []).length + ' link(s)'"></span>
+                  </div>
+                </button>
+              </template>
+              <div class="empty-state" x-show="!filteredContextDocs().length && !loadingList">No context docs match the current filter.</div>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="section === 'issues'">
+          <div class="stack">
+            <label>
+              Filter by task slug
+              <input list="tasks-datalist" type="text" x-model="issueFilter" @keydown.enter.prevent="loadIssues()" placeholder="Type to search..." />
+            </label>
+            <div class="button-group">
+              <button class="primary-btn" @click="loadIssues()">Apply</button>
+              <button class="ghost-btn" @click="issueFilter=''; loadIssues()">Reset</button>
+            </div>
+            <div class="sidebar-list" x-show="!loadingList">
+              <template x-for="issue in issues" :key="issue.slug">
+                <button class="list-item" :class="{active: selectedIssue && selectedIssue.slug === issue.slug}" @click="loadIssueDetail(issue.slug)">
+                  <div class="list-item-title" x-text="issue.title"></div>
+                  <div class="meta-line">
+                    <span class="status-badge" :class="statusClass(issue.status || 'open')" x-text="formatStatus(issue.status || 'open')"></span>
+                    <span class="small muted" x-text="issue.linked_task_slug || 'No task linked'"></span>
+                  </div>
+                </button>
+              </template>
+              <div class="empty-state" x-show="!issues.length && !loadingList">No issues found.</div>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="section === 'runbooks'">
+          <div class="stack">
+            <label>
+              Filter runbooks
+              <input type="text" x-model="runbookFilter" placeholder="Search title or slug" />
+            </label>
+            <label>
+              Filter by project
+              <input list="projects-datalist" type="text" x-model="runbookProjectFilter" @input="loadRunbooks()" placeholder="Project slug..." />
+            </label>
+            <div class="sidebar-list" x-show="!loadingList">
+              <template x-for="runbook in filteredRunbooks()" :key="runbook.slug">
+                <button class="list-item" :class="{active: selectedRunbook && selectedRunbook.slug === runbook.slug}" @click="loadRunbookDetail(runbook.slug)">
+                  <div class="list-item-title" x-text="runbook.title"></div>
+                  <div class="meta-line">
+                    <span class="status-badge" :class="statusClass(runbook.status || 'draft')" x-text="formatStatus(runbook.status || 'draft')"></span>
+                    <span class="small muted" x-show="runbook.project_slug" x-text="runbook.project_slug"></span>
+                  </div>
+                </button>
+              </template>
+              <div class="empty-state" x-show="!filteredRunbooks().length && !loadingList">No runbooks match the current filter.</div>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="section === 'toolDocs'">
+          <div class="stack">
+            <div class="sidebar-list" x-show="!loadingList">
+              <template x-for="doc in toolDocs" :key="doc.slug">
+                <button class="list-item" :class="{active: selectedToolDoc && selectedToolDoc.slug === doc.slug}" @click="loadToolDocDetail(doc.slug)">
+                  <div class="list-item-title" x-text="doc.title"></div>
+                  <div class="meta-line tag-list">
+                    <template x-for="tag in (doc.tags || []).slice(0, 3)" :key="tag"><span class="tag" x-text="tag"></span></template>
+                  </div>
+                </button>
+              </template>
+              <div class="empty-state" x-show="!toolDocs.length && !loadingList">No tool docs yet.</div>
+            </div>
+          </div>
+        </template>
+
+        <div class="empty-state" x-show="loadingList">Loading…</div>
+      </aside>
+
+      <main class="main">
         <div class="panel">
-          <h2>Link to Epic</h2>
-          <template x-if="!selection.slug">
-            <p class="muted" style="font-size:.85rem">Select a doc from the list to link it to an additional epic.</p>
+          <div class="alert error" x-show="apiError" x-text="apiError"></div>
+
+          <template x-if="section === 'queue' && loadingDetail">
+            <div class="empty-state">Loading task detail…</div>
           </template>
-          <template x-if="selection.slug">
-            <div>
-              <p class="muted" style="font-size:.85rem;margin-bottom:.5rem">Linking: <strong x-text="selection.slug"></strong></p>
-              <div class="field"><span class="field-label">Epic slug</span><input type="text" x-model="designDocLink.epic_slug" placeholder="EPIC-001"></div>
-              <div class="editor-actions"><button class="btn-primary" @click="linkDesignDoc">Link to epic</button></div>
+
+          <template x-if="section === 'queue' && !loadingDetail && !selectedTask">
+            <div class="empty-state">
+              <h3>Queue ready</h3>
+              <p>Select a task from the sidebar or create a new task to start working.</p>
             </div>
           </template>
-          <template x-if="selectedDocChunks.length">
-            <div style="margin-top:1rem">
-              <h3>Chunks</h3>
-              <template x-for="chunk in selectedDocChunks" :key="chunk.id"><div class="panel" style="margin-top:.5rem"><div class="item-title" x-text="chunk.section_heading"></div><div class="muted" x-text="chunk.content"></div></div></template>
+
+          <template x-if="section === 'projects' && !selectedProject && !selectedEpic && !selectedTask">
+            <div class="empty-state">
+              <h3>Projects overview</h3>
+              <p>Select a project, epic, or task from the tree to work with it.</p>
             </div>
           </template>
-        </div>
-      </div>
-    </div>
 
-    <div class="main-content" x-show="activeSection === 'issues'">
-      <div class="panel">
-        <h2 x-text="selection.type === 'issue' ? 'Edit Issue' : 'Create Issue'"></h2>
-        <div class="grid">
-          <div class="field"><span class="field-label">Title</span><input type="text" x-model="issueForm.title"></div>
-          <div class="field"><span class="field-label">Severity</span><select x-model="issueForm.severity"><option>sev1</option><option>sev2</option><option>sev3</option></select></div>
-        </div>
-        <div class="field"><span class="field-label">Task slug</span><input type="text" x-model="issueForm.task_slug" placeholder="TASK-001"></div>
-        <div class="field"><span class="field-label">Triage steps</span><textarea x-model="issueForm.triage_steps"></textarea></div>
-        <div class="field"><span class="field-label">Root cause</span><textarea x-model="issueForm.root_cause"></textarea></div>
-        <div class="field"><span class="field-label">Resolution</span><textarea x-model="issueForm.resolution"></textarea></div>
-        <div class="field"><span class="field-label">Lessons learned</span><textarea x-model="issueForm.lessons_learned"></textarea></div>
-        <div class="editor-actions">
-          <button class="btn-primary" @click="saveIssue">Save issue</button>
-          <button class="btn-warning" x-show="selection.type === 'issue'" @click="resolveSelectedIssue">Resolve issue</button>
-          <button class="btn-secondary" @click="resetIssueForm">New issue</button>
-        </div>
-      </div>
-    </div>
+          <template x-if="section === 'notes' && !selectedNote">
+            <div class="empty-state">
+              <h3>Notes</h3>
+              <p>Select a note from the sidebar or create a scoped note to capture context.</p>
+            </div>
+          </template>
 
-    <div class="main-content" x-show="activeSection === 'runbooks'">
-      <div class="panel">
-        <h2 x-text="selection.type === 'runbook' ? 'Edit Runbook' : 'Create Runbook'"></h2>
-        <div class="grid">
-          <div class="field"><span class="field-label">Title</span><input type="text" x-model="runbookForm.title"></div>
-          <div class="field"><span class="field-label">Service</span><input type="text" x-model="runbookForm.service"></div>
-          <div class="field"><span class="field-label">Category</span><input type="text" x-model="runbookForm.category"></div>
-          <div class="field"><span class="field-label">Status</span><select x-model="runbookForm.status"><option>draft</option><option>active</option><option>deprecated</option></select></div>
-        </div>
-        <div class="field"><span class="field-label">Symptoms</span><textarea x-model="runbookForm.symptoms"></textarea></div>
-        <div class="field"><span class="field-label">Prerequisites</span><textarea x-model="runbookForm.prerequisites"></textarea></div>
-        <div class="field"><span class="field-label">Steps</span><textarea x-model="runbookForm.steps"></textarea></div>
-        <div class="field"><span class="field-label">Verification</span><textarea x-model="runbookForm.verification"></textarea></div>
-        <div class="field"><span class="field-label">Escalation</span><textarea x-model="runbookForm.escalation"></textarea></div>
-        <div class="field"><span class="field-label">Linked issue ids</span><input type="text" x-model="runbookForm.linked_issue_ids_text" placeholder="1,2"></div>
-        <div class="editor-actions">
-          <button class="btn-primary" @click="saveRunbook">Save runbook</button>
-          <button class="btn-warning" x-show="selection.type === 'runbook'" @click="validateSelectedRunbook">Validate</button>
-          <button class="btn-secondary" @click="resetRunbookForm">New runbook</button>
-        </div>
-      </div>
-    </div>
+          <template x-if="section === 'designDocs' && !selectedDesignDoc">
+            <div class="empty-state">
+              <h3>Design Docs</h3>
+              <p>Choose a design doc to edit, or create one from the sidebar.</p>
+            </div>
+          </template>
 
-    <div class="main-content" x-show="activeSection === 'tool_docs'">
-      <div class="panel">
-        <h2>Add Tool Doc Source</h2>
-        <p class="muted" style="font-size:.85rem;margin-bottom:.75rem">Add a GitHub repository to index as tool documentation. Content will be chunked and made available for agent briefs.</p>
-        <div class="field"><span class="field-label">Title</span><input type="text" x-model="toolDocForm.title" placeholder="My Tool Docs"></div>
-        <div class="field"><span class="field-label">Repository URL</span><input type="url" x-model="toolDocForm.repo_url" placeholder="https://github.com/owner/repo"></div>
-        <div class="field"><span class="field-label">Tags (comma-separated)</span><input type="text" x-model="toolDocForm.tagsText"></div>
-        <div class="editor-actions"><button class="btn-primary" @click="saveToolDoc">Add &amp; index</button></div>
-      </div>
-      <template x-if="toolDocs.length > 0">
-        <div class="panel">
-          <h2>Indexed Sources</h2>
-          <template x-for="d in toolDocs" :key="d.slug">
-            <div class="list-card" style="margin-bottom:.4rem">
-              <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-                <div style="flex:1;min-width:0">
-                  <div class="item-title" x-text="d.title"></div>
-                  <div class="muted" x-text="d.repo_url"></div>
-                  <div class="muted" x-text="d.slug"></div>
+          <template x-if="section === 'issues' && !selectedIssue">
+            <div class="empty-state">
+              <h3>Issues</h3>
+              <p>Pick an issue to investigate, or log a new issue from the sidebar or a task.</p>
+            </div>
+          </template>
+
+          <template x-if="section === 'runbooks' && !selectedRunbook">
+            <div class="empty-state">
+              <h3>Runbooks</h3>
+              <p>Select a runbook to edit, or create one for a known issue response flow.</p>
+            </div>
+          </template>
+
+          <template x-if="section === 'toolDocs' && !selectedToolDoc">
+            <div class="empty-state">
+              <h3>Tool Docs</h3>
+              <p>Select indexed documentation to inspect, or add a new source.</p>
+            </div>
+          </template>
+
+          <template x-if="section === 'projects' && selectedProject && !selectedEpic && !selectedTask">
+            <div class="panel">
+              <div class="card">
+                <div class="panel-header">
+                  <div>
+                    <div class="breadcrumbs">
+                      <span>Project</span>
+                      <span>›</span>
+                      <span x-text="selectedProject.title"></span>
+                    </div>
+                    <h2 x-text="selectedProject.title"></h2>
+                  </div>
+                  <div class="toolbar">
+                    <button class="primary-btn" @click="saveProject()">Save Project</button>
+                    <button class="ghost-btn" @click="openModal('epic', { project_slug: selectedProject.slug })">+ Epic</button>
+                    <button class="danger-btn" @click="archiveProject()">Archive</button>
+                    <button class="ghost-btn" @click="clearSelection()">Clear</button>
+                  </div>
                 </div>
-                <button class="btn-secondary btn-sm" @click="reindexToolDoc(d.slug)" title="Re-index">↻ Reindex</button>
+                <div class="grid grid-2">
+                  <label><span class="required">Title</span><input type="text" x-model="selectedProject.title" /></label>
+                  <label>
+                    <span class="required">Status</span>
+                    <select x-model="selectedProject.status">
+                      <template x-for="status in projectStatuses" :key="status"><option :value="status" x-text="formatStatus(status)"></option></template>
+                    </select>
+                  </label>
+                  <label><span class="required">Goal</span><input type="text" x-model="selectedProject.goal" /></label>
+                  <label><span>Tags (comma separated)</span><input type="text" :value="formatCsv(selectedProject.tags)" @input="selectedProject.tags = csvToArray($event.target.value)" /></label>
+                  <label class="grid" style="grid-column: 1 / -1;">
+                    <span>Description</span>
+                    <textarea x-model="selectedProject.description"></textarea>
+                  </label>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="panel-header">
+                  <h3>Epics</h3>
+                  <span class="muted" x-text="`${(selectedProject.epics || []).length} total`"></span>
+                </div>
+                <div class="stack" x-show="(selectedProject.epics || []).length">
+                  <template x-for="epic in (selectedProject.epics || [])" :key="epic.slug">
+                    <button class="linked-card" @click="selectEpic(selectedProject, epic)">
+                      <div class="linked-title" x-text="epic.title"></div>
+                      <div class="meta-line">
+                        <span class="status-badge" :class="statusClass(epic.status)" x-text="formatStatus(epic.status)"></span>
+                        <span class="small muted" x-text="`${(epic.tasks || []).length} tasks`"></span>
+                      </div>
+                    </button>
+                  </template>
+                </div>
+                <div class="empty-state" x-show="!(selectedProject.epics || []).length">No epics under this project yet.</div>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="section === 'projects' && selectedEpic && !selectedTask">
+            <div class="panel">
+              <div class="card">
+                <div class="panel-header">
+                  <div>
+                    <div class="breadcrumbs">
+                      <button @click="selectProject(getProjectForEpic(selectedEpic))" x-text="getProjectForEpic(selectedEpic)?.title || 'Project'"></button>
+                      <span>›</span>
+                      <span x-text="selectedEpic.title"></span>
+                    </div>
+                    <h2 x-text="selectedEpic.title"></h2>
+                  </div>
+                  <div class="toolbar">
+                    <button class="primary-btn" @click="saveEpic()">Save Epic</button>
+                    <button class="ghost-btn" @click="openModal('task', { epic_slug: selectedEpic.slug })">+ Task</button>
+                    <button class="danger-btn" @click="archiveEpic()">Archive</button>
+                    <button class="ghost-btn" @click="clearSelection()">Clear</button>
+                  </div>
+                </div>
+                <div class="grid grid-2">
+                  <label><span class="required">Title</span><input type="text" x-model="selectedEpic.title" /></label>
+                  <label>
+                    <span class="required">Status</span>
+                    <select x-model="selectedEpic.status">
+                      <template x-for="status in projectStatuses" :key="status"><option :value="status" x-text="formatStatus(status)"></option></template>
+                    </select>
+                  </label>
+                  <label><span>Tags (comma separated)</span><input type="text" :value="formatCsv(selectedEpic.tags)" @input="selectedEpic.tags = csvToArray($event.target.value)" /></label>
+                  <label><span>Blocked reason</span><input type="text" x-model="selectedEpic.blocked_reason" /></label>
+                  <label class="grid" style="grid-column: 1 / -1;"><span>Description</span><textarea x-model="selectedEpic.description"></textarea></label>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="panel-header">
+                  <h3>Linked design docs</h3>
+                </div>
+                <div class="stack" x-show="epicDesignDocs(selectedEpic).length">
+                  <template x-for="doc in epicDesignDocs(selectedEpic)" :key="doc.slug || doc.id">
+                    <div class="linked-card">
+                      <div class="linked-card-header row-between">
+                        <div>
+                          <div class="linked-title" x-text="doc.title"></div>
+                          <div class="small muted" x-text="doc.slug || `ID ${doc.id}`"></div>
+                        </div>
+                        <div class="inline-actions">
+                          <button class="ghost-btn" @click="openDesignDoc(doc.slug)">Open</button>
+                          <button class="danger-btn" @click="unlinkDesignDoc(doc)">Unlink</button>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+                <div class="empty-state" x-show="!epicDesignDocs(selectedEpic).length">No design docs linked to this epic.</div>
+                <div class="grid grid-2 spacer-top">
+                  <label>
+                    Link design doc
+                    <input list="design-docs-datalist" type="text" x-model="selectedEpic._linkDesignDocSlug" placeholder="Type to search..." />
+                  </label>
+                  <div class="inline-actions" style="align-items: end;">
+                    <button class="primary-btn" @click="linkDesignDoc()">Link Doc</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="panel-header">
+                  <h3>Tasks</h3>
+                  <span class="muted" x-text="`${(selectedEpic.tasks || []).length} total`"></span>
+                </div>
+                <div class="stack" x-show="(selectedEpic.tasks || []).length">
+                  <template x-for="task in (selectedEpic.tasks || [])" :key="task.slug">
+                    <button class="linked-card" @click="selectProjectTask(getProjectForEpic(selectedEpic), selectedEpic, task)">
+                      <div class="linked-title" x-text="task.title"></div>
+                      <div class="meta-line">
+                        <span class="status-badge" :class="statusClass(task.status)" x-text="formatStatus(task.status)"></span>
+                      </div>
+                    </button>
+                  </template>
+                </div>
+                <div class="empty-state" x-show="!(selectedEpic.tasks || []).length">No tasks in this epic yet.</div>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="(section === 'queue' || section === 'projects') && selectedTask">
+            <div class="panel">
+              <div class="card">
+                <div class="panel-header">
+                  <div>
+                    <div class="breadcrumbs">
+                      <template x-for="(crumb, index) in taskBreadcrumbs(selectedTask)" :key="`${crumb.type}-${crumb.slug || index}`">
+                        <div class="breadcrumbs">
+                          <template x-if="index > 0"><span>›</span></template>
+                          <template x-if="crumb.type === 'project'"><button @click="openProjectBySlug(crumb.slug)" x-text="crumb.title"></button></template>
+                          <template x-if="crumb.type === 'epic'"><button @click="openEpicBySlug(crumb.slug)" x-text="crumb.title"></button></template>
+                          <template x-if="crumb.type === 'task'"><span x-text="crumb.title"></span></template>
+                        </div>
+                      </template>
+                    </div>
+                    <h2 x-text="selectedTask.title"></h2>
+                  </div>
+                  <div class="toolbar">
+                    <button class="primary-btn" @click="saveTask()">Save Task</button>
+                    <button class="ghost-btn" @click="openModal('issue', { task_slug: selectedTask.slug })">Log Issue</button>
+                    <button class="ghost-btn" @click="openModal('contextDoc', { entity_type: 'task', entity_slug: selectedTask.slug })">+ Context Doc</button>
+                    <button class="danger-btn" @click="archiveTask()">Archive</button>
+                    <button class="ghost-btn" @click="clearSelection()">Clear</button>
+                  </div>
+                </div>
+                <div class="grid grid-2">
+                  <label><span class="required">Title</span><input type="text" x-model="selectedTask.title" /></label>
+                  <label>
+                    <span class="required">Status</span>
+                    <select x-model="selectedTask.status" @change="changeTaskStatus(selectedTask.status)">
+                      <template x-for="status in taskStatuses" :key="status"><option :value="status" x-text="formatStatus(status)"></option></template>
+                    </select>
+                  </label>
+                  <label>
+                    <span class="required">Epic slug</span>
+                    <input list="epics-datalist" type="text" x-model="selectedTask.epic_slug" placeholder="Type to search..." />
+                  </label>
+                  <label><span>Assignee</span><input type="text" x-model="selectedTask.assignee" /></label>
+                  <label>
+                    <span>Estimated effort</span>
+                    <select x-model="selectedTask.estimated_effort">
+                      <option value="">—</option>
+                      <option value="xs">XS</option>
+                      <option value="s">S</option>
+                      <option value="m">M</option>
+                      <option value="l">L</option>
+                      <option value="xl">XL</option>
+                    </select>
+                  </label>
+                  <label><span>Tags (comma separated)</span><input type="text" :value="formatCsv(selectedTask.tags)" @input="selectedTask.tags = csvToArray($event.target.value)" /></label>
+                  <label class="grid" style="grid-column: 1 / -1;"><span>Description</span><textarea x-model="selectedTask.description"></textarea></label>
+                  <label><span>Blocked reason</span><textarea x-model="selectedTask.blocked_reason"></textarea></label>
+                  <label><span>Context snapshot</span><textarea x-model="selectedTask.context_snapshot"></textarea></label>
+                </div>
+              </div>
+
+              <div class="accordion-panel">
+                <button class="accordion-btn" @click="toggleAccordion('criteria')">
+                  <span>Acceptance Criteria</span>
+                  <span x-text="accordions.criteria ? '−' : '+'"></span>
+                </button>
+                <div class="accordion-content stack" x-show="accordions.criteria">
+                  <template x-for="criterion in (selectedTask.acceptance_criteria || [])" :key="criterion.id">
+                    <div class="linked-card row-between">
+                      <div>
+                        <div class="linked-title" x-text="criterion.description"></div>
+                        <div class="meta-line"><span class="status-badge" :class="criterion.verified ? 'status-complete' : 'status-draft'" x-text="criterion.verified ? 'Verified' : 'Pending'"></span></div>
+                      </div>
+                      <button class="danger-btn" @click="deleteAcceptanceCriterion(criterion.id)">Delete</button>
+                    </div>
+                  </template>
+                  <div class="empty-state" x-show="!(selectedTask.acceptance_criteria || []).length">No acceptance criteria yet.</div>
+                  <div class="card">
+                    <div class="grid grid-2">
+                      <label><span class="required">Description</span><input type="text" x-model="selectedTask._newCriterion.description" placeholder="Describe the criterion" /></label>
+                    </div>
+                    <button class="primary-btn spacer-top" @click="addAcceptanceCriterion()">Add Criterion</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="accordion-panel">
+                <button class="accordion-btn" @click="toggleAccordion('testing')">
+                  <span>Testing Layers</span>
+                  <span x-text="accordions.testing ? '−' : '+'"></span>
+                </button>
+                <div class="accordion-content stack" x-show="accordions.testing">
+                  <template x-for="layer in (selectedTask.testing_layers || [])" :key="layer.id">
+                    <div class="linked-card row-between">
+                      <div>
+                        <div class="linked-title" x-text="layer.layer"></div>
+                        <div class="small muted" x-text="layer.description"></div>
+                        <div class="meta-line"><span class="status-badge" :class="'status-' + (layer.status || 'draft')" x-text="layer.status || 'pending'"></span></div>
+                      </div>
+                      <button class="danger-btn" @click="deleteTestingLayer(layer.id)">Delete</button>
+                    </div>
+                  </template>
+                  <div class="empty-state" x-show="!(selectedTask.testing_layers || []).length">No testing layers yet.</div>
+                  <div class="card">
+                    <div class="grid grid-3">
+                      <label><span class="required">Layer</span>
+                        <select x-model="selectedTask._newLayer.layer">
+                          <option value="">— select —</option>
+                          <option value="unit">unit</option>
+                          <option value="integration">integration</option>
+                          <option value="e2e">e2e</option>
+                          <option value="manual">manual</option>
+                          <option value="observability">observability</option>
+                        </select>
+                      </label>
+                      <label><span class="required">Description</span><input type="text" x-model="selectedTask._newLayer.description" placeholder="Describe coverage" /></label>
+                    </div>
+                    <button class="primary-btn spacer-top" @click="addTestingLayer()">Add Testing Layer</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="accordion-panel">
+                <button class="accordion-btn" @click="toggleAccordion('dod')">
+                  <span>Definition of Done</span>
+                  <span x-text="accordions.dod ? '−' : '+'"></span>
+                </button>
+                <div class="accordion-content stack" x-show="accordions.dod">
+                  <div class="grid grid-2">
+                    <label><span>Description</span><textarea x-model="selectedTask._dodDraft.description"></textarea></label>
+                    <label><span>Required checks (comma separated)</span><textarea x-model="selectedTask._dodDraft.required_checks"></textarea></label>
+                  </div>
+                  <button class="primary-btn" @click="saveDoD()">Save DoD</button>
+                </div>
+              </div>
+
+              <div class="accordion-panel">
+                <button class="accordion-btn" @click="toggleAccordion('brief')">
+                  <span>Brief</span>
+                  <span x-text="accordions.brief ? '−' : '+'"></span>
+                </button>
+                <div class="accordion-content stack" x-show="accordions.brief">
+                  <button class="ghost-btn" @click="toggleBrief()" x-text="briefOpen ? 'Hide Brief' : 'View Brief'"></button>
+                  <div class="preview" x-show="briefOpen && briefContent" x-html="renderMarkdown(briefContent)"></div>
+                  <div class="empty-state" x-show="briefOpen && !briefContent">No brief content returned for this task.</div>
+                </div>
+              </div>
+
+              <div class="accordion-panel">
+                <button class="accordion-btn" @click="toggleAccordion('issues')">
+                  <span>Linked Issues</span>
+                  <span x-text="accordions.issues ? '−' : '+'"></span>
+                </button>
+                <div class="accordion-content stack" x-show="accordions.issues">
+                  <div class="toolbar">
+                    <button class="primary-btn" @click="openModal('issue', { task_slug: selectedTask.slug })">Log Issue</button>
+                  </div>
+                  <template x-for="issue in (selectedTask.linked_issues || [])" :key="issue.slug">
+                    <button class="linked-card" @click="openIssue(issue.slug)">
+                      <div class="linked-title" x-text="issue.title"></div>
+                      <div class="meta-line">
+                        <span class="status-badge" :class="statusClass(issue.status || 'open')" x-text="formatStatus(issue.status || 'open')"></span>
+                        <span class="small muted" x-text="issue.severity || 'severity not set'"></span>
+                      </div>
+                    </button>
+                  </template>
+                  <div class="empty-state" x-show="!(selectedTask.linked_issues || []).length">No issues linked to this task.</div>
+                </div>
+              </div>
+
+              <div class="accordion-panel">
+                <button class="accordion-btn" @click="toggleAccordion('siblings')">
+                  <span>Sibling Tasks</span>
+                  <span x-text="accordions.siblings ? '−' : '+'"></span>
+                </button>
+                <div class="accordion-content stack" x-show="accordions.siblings">
+                  <template x-for="task in siblingTasks" :key="task.slug">
+                    <button class="linked-card" @click="loadTaskDetail(task.slug)">
+                      <div class="linked-title" x-text="task.title"></div>
+                      <div class="meta-line"><span class="status-badge" :class="statusClass(task.status)" x-text="formatStatus(task.status)"></span></div>
+                    </button>
+                  </template>
+                  <div class="empty-state" x-show="!siblingTasks.length">No sibling tasks in this epic.</div>
+                </div>
+              </div>
+
+              <div class="accordion-panel">
+                <button class="accordion-btn" @click="toggleAccordion('taskContextDocs')">
+                  <span>Context Docs</span>
+                  <span x-text="accordions.taskContextDocs ? '−' : '+'"></span>
+                </button>
+                <div class="accordion-content stack" x-show="accordions.taskContextDocs">
+                  <template x-for="doc in (selectedTask.context_docs || [])" :key="doc.slug">
+                    <button class="linked-card" @click="openContextDoc(doc.slug)">
+                      <div class="linked-title" x-text="doc.title"></div>
+                      <div class="meta-line tag-list">
+                        <template x-for="tag in (doc.tags || []).slice(0, 3)" :key="tag"><span class="tag" x-text="tag"></span></template>
+                      </div>
+                    </button>
+                  </template>
+                  <div class="empty-state" x-show="!(selectedTask.context_docs || []).length">No context docs linked to this task.</div>
+                  <button class="ghost-btn" @click="openModal('contextDoc', { entity_type: 'task', entity_slug: selectedTask.slug })">+ Link Context Doc</button>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="section === 'contextDocs' && selectedContextDoc">
+            <div class="panel">
+              <div class="card">
+                <div class="panel-header">
+                  <div>
+                    <div class="breadcrumbs"><span>Context Docs</span><span>›</span><span x-text="selectedContextDoc.title"></span></div>
+                    <h2 x-text="selectedContextDoc.title"></h2>
+                    <div class="small muted" x-text="selectedContextDoc.slug"></div>
+                  </div>
+                  <div class="toolbar">
+                    <button class="primary-btn" @click="saveContextDoc()">Save Context Doc</button>
+                    <button class="ghost-btn" @click="clearSelection()">Clear</button>
+                  </div>
+                </div>
+                <div class="grid grid-2">
+                  <label><span class="required">Title</span><input type="text" x-model="selectedContextDoc.title" /></label>
+                  <label><span>Tags (comma separated)</span><input type="text" :value="formatCsv(selectedContextDoc.tags)" @input="selectedContextDoc.tags = csvToArray($event.target.value)" /></label>
+                  <label class="grid" style="grid-column: 1 / -1;"><span class="required">Content (Markdown)</span><textarea x-model="selectedContextDoc.content"></textarea></label>
+                </div>
+              </div>
+              <div class="card">
+                <div class="panel-header"><h3>Preview</h3></div>
+                <div class="preview" x-html="renderMarkdown(selectedContextDoc.content)"></div>
+              </div>
+              <div class="accordion-panel">
+                <button class="accordion-btn" @click="toggleAccordion('contextDocLinks')">
+                  <span>Linked Entities</span>
+                  <span x-text="accordions.contextDocLinks ? '−' : '+'"></span>
+                </button>
+                <div class="accordion-content stack" x-show="accordions.contextDocLinks">
+                  <template x-for="link in (selectedContextDoc.links || [])" :key="link.id">
+                    <div class="linked-card row-between">
+                      <div>
+                        <div class="linked-title" x-text="link.entity_type + ': ' + link.entity_slug"></div>
+                      </div>
+                      <button class="danger-btn" @click="removeContextDocLink(link)">Unlink</button>
+                    </div>
+                  </template>
+                  <div class="empty-state" x-show="!(selectedContextDoc.links || []).length">No entities linked to this doc.</div>
+                  <div class="card">
+                    <div class="grid grid-2">
+                      <label>
+                        <span>Entity Type</span>
+                        <select x-model="selectedContextDoc._newLink.entity_type">
+                          <option value="">— Select —</option>
+                          <option value="project">project</option>
+                          <option value="epic">epic</option>
+                          <option value="task">task</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Entity Slug</span>
+                        <input list="context-doc-entity-datalist" type="text" x-model="selectedContextDoc._newLink.entity_slug" placeholder="Slug..." />
+                        <datalist id="context-doc-entity-datalist">
+                          <template x-for="p in (allProjects || [])" :key="p.slug"><option :value="p.slug" x-text="p.title"></option></template>
+                          <template x-for="e in (allEpics || [])" :key="e.slug"><option :value="e.slug" x-text="e.title"></option></template>
+                          <template x-for="t in (allTasks || [])" :key="t.slug"><option :value="t.slug" x-text="t.title"></option></template>
+                        </datalist>
+                      </label>
+                    </div>
+                    <button class="primary-btn spacer-top" @click="addContextDocLink()">Add Link</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="section === 'contextDocs' && !selectedContextDoc">
+            <div class="panel-empty">
+              <div class="empty-state">
+                <p>Select a context doc from the list, or create a new one.</p>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="section === 'notes' && selectedNote">
+            <div class="panel">
+              <div class="card">
+                <div class="panel-header">
+                  <div>
+                    <div class="breadcrumbs"><span>Notes</span><span>›</span><span x-text="selectedNote.title"></span></div>
+                    <h2 x-text="selectedNote.title"></h2>
+                  </div>
+                  <div class="toolbar">
+                    <button class="primary-btn" @click="saveNote()">Save Note</button>
+                    <button class="danger-btn" x-show="!selectedNote.archived" @click="toggleNoteArchive(true)">Archive</button>
+                    <button class="ghost-btn" x-show="selectedNote.archived" @click="toggleNoteArchive(false)">Unarchive</button>
+                    <button class="ghost-btn" @click="clearSelection()">Clear</button>
+                  </div>
+                </div>
+                <div class="grid grid-2">
+                  <label><span class="required">Title</span><input type="text" x-model="selectedNote.title" /></label>
+                  <label><span class="required">Tags (comma separated)</span><input type="text" :value="formatCsv(selectedNote.tags)" @input="selectedNote.tags = csvToArray($event.target.value); noteInlineError = ''" /></label>
+                  <div class="error-text" x-show="noteInlineError" x-text="noteInlineError"></div>
+                  <label class="grid" style="grid-column: 1 / -1;"><span class="required">Content</span><textarea x-model="selectedNote.body"></textarea></label>
+                </div>
+              </div>
+              <div class="card">
+                <div class="panel-header"><h3>Preview</h3></div>
+                <div class="preview" x-html="renderMarkdown(selectedNote.body)"></div>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="section === 'designDocs' && selectedDesignDoc">
+            <div class="panel">
+              <div class="card">
+                <div class="panel-header">
+                  <div>
+                    <div class="breadcrumbs"><span>Design Docs</span><span>›</span><span x-text="selectedDesignDoc.title"></span></div>
+                    <h2 x-text="selectedDesignDoc.title"></h2>
+                  </div>
+                  <div class="toolbar">
+                    <button class="primary-btn" @click="saveDesignDoc()">Save Design Doc</button>
+                    <button class="ghost-btn" @click="clearSelection()">Clear</button>
+                  </div>
+                </div>
+                <div class="grid grid-2">
+                  <label><span class="required">Title</span><input type="text" x-model="selectedDesignDoc.title" /></label>
+                  <label><span>Tags (comma separated)</span><input type="text" :value="formatCsv(selectedDesignDoc.tags)" @input="selectedDesignDoc.tags = csvToArray($event.target.value)" /></label>
+                  <label class="grid" style="grid-column: 1 / -1;"><span class="required">Content</span><textarea x-model="selectedDesignDoc.content"></textarea></label>
+                </div>
+              </div>
+              <div class="card">
+                <div class="panel-header"><h3>Preview</h3></div>
+                <div class="preview" x-html="renderMarkdown(selectedDesignDoc.content)"></div>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="section === 'issues' && selectedIssue">
+            <div class="panel">
+              <div class="card">
+                <div class="panel-header">
+                  <div>
+                    <div class="breadcrumbs">
+                      <template x-if="selectedIssue.linked_task_slug"><button @click="openTaskFromSlug(selectedIssue.linked_task_slug)" x-text="selectedIssue.linked_task_slug"></button></template>
+                      <template x-if="selectedIssue.linked_task_slug"><span>›</span></template>
+                      <span x-text="selectedIssue.title"></span>
+                    </div>
+                    <h2 x-text="selectedIssue.title"></h2>
+                  </div>
+                  <div class="toolbar">
+                    <button class="primary-btn" @click="saveIssue()">Save Issue</button>
+                    <button class="ghost-btn" @click="resolveIssue()">Resolve</button>
+                    <button class="ghost-btn" @click="clearSelection()">Clear</button>
+                  </div>
+                </div>
+                <div class="grid grid-2">
+                  <label><span class="required">Title</span><input type="text" x-model="selectedIssue.title" /></label>
+                  <label>
+                    <span class="required">Severity</span>
+                    <select x-model="selectedIssue.severity">
+                      <option value="sev1">Sev1 — Critical</option>
+                      <option value="sev2">Sev2 — High</option>
+                      <option value="sev3">Sev3 — Low</option>
+                    </select>
+                  </label>
+                  <label><span>Linked task</span><input list="tasks-datalist" type="text" x-model="selectedIssue.linked_task_slug" placeholder="Type to search..." /></label>
+                  <label><span>Linked runbooks</span>
+                    <div class="tag-list">
+                      <template x-for="rbId in (selectedIssue.linked_runbook_ids || [])" :key="rbId">
+                        <span class="tag" x-text="(allRunbooks.find(r => r.id === rbId) || {}).slug || rbId"></span>
+                      </template>
+                    </div>
+                  </label>
+                  <label><span>Triage steps</span><textarea x-model="selectedIssue.triage_steps"></textarea></label>
+                  <label><span>Root cause</span><textarea x-model="selectedIssue.root_cause"></textarea></label>
+                  <label><span>Resolution</span><textarea x-model="selectedIssue.resolution"></textarea></label>
+                  <label><span>Lessons learned</span><textarea x-model="selectedIssue.lessons_learned"></textarea></label>
+                </div>
+              </div>
+              <div class="card">
+                <div class="panel-header"><h3>Linked runbooks</h3></div>
+                <div class="stack" x-show="(selectedIssue.linked_runbook_ids || []).length">
+                  <template x-for="rbId in (selectedIssue.linked_runbook_ids || [])" :key="rbId">
+                    <button class="linked-card" @click="openRunbook((allRunbooks.find(r => r.id === rbId) || {}).slug)">
+                      <div class="linked-title" x-text="(allRunbooks.find(r => r.id === rbId) || {}).title || rbId"></div>
+                    </button>
+                  </template>
+                </div>
+                <div class="empty-state" x-show="!(selectedIssue.linked_runbook_ids || []).length">No linked runbooks.</div>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="section === 'runbooks' && selectedRunbook">
+            <div class="panel">
+              <div class="card">
+                <div class="panel-header">
+                  <div>
+                    <div class="breadcrumbs"><span>Runbooks</span><span>›</span><span x-text="selectedRunbook.title"></span></div>
+                    <h2 x-text="selectedRunbook.title"></h2>
+                  </div>
+                  <div class="toolbar">
+                    <button class="primary-btn" @click="saveRunbook()">Save Runbook</button>
+                    <button class="ghost-btn" @click="validateRunbook()">Validate</button>
+                    <button class="ghost-btn" @click="clearSelection()">Clear</button>
+                  </div>
+                </div>
+                <div class="grid grid-2">
+                  <label><span class="required">Title</span><input type="text" x-model="selectedRunbook.title" /></label>
+                  <label>
+                    <span class="required">Status</span>
+                    <select x-model="selectedRunbook.status">
+                      <template x-for="status in runbookStatuses" :key="status"><option :value="status" x-text="formatStatus(status)"></option></template>
+                    </select>
+                  </label>
+                  <label><span class="required">Service</span><input type="text" x-model="selectedRunbook.service" placeholder="api" /></label>
+                  <label><span class="required">Category</span><input type="text" x-model="selectedRunbook.category" placeholder="deployment" /></label>
+                  <label><span>Project (optional)</span><input list="projects-datalist" type="text" x-model="selectedRunbook.project_slug" placeholder="Type to search..." /></label>
+                  <label><span>Tags (comma separated)</span><input type="text" :value="formatCsv(selectedRunbook.tags)" @input="selectedRunbook.tags = csvToArray($event.target.value)" /></label>
+                  <label><span>Linked issues</span>
+                    <div class="tag-list">
+                      <template x-for="issueId in (selectedRunbook.linked_issue_ids || [])" :key="issueId">
+                        <span class="tag" x-text="(allIssues.find(i => i.id === issueId) || {}).slug || issueId"></span>
+                      </template>
+                    </div>
+                  </label>
+                  <label><span>Symptoms</span><textarea x-model="selectedRunbook.symptoms"></textarea></label>
+                  <label><span>Prerequisites</span><textarea x-model="selectedRunbook.prerequisites"></textarea></label>
+                  <label class="grid" style="grid-column: 1 / -1;"><span class="required">Steps</span><textarea x-model="selectedRunbook.steps"></textarea></label>
+                  <label><span>Verification</span><textarea x-model="selectedRunbook.verification"></textarea></label>
+                  <label><span>Escalation</span><textarea x-model="selectedRunbook.escalation"></textarea></label>
+                </div>
+              </div>
+              <div class="card">
+                <div class="panel-header"><h3>Steps Preview</h3></div>
+                <div class="preview" x-html="renderMarkdown(selectedRunbook.steps)"></div>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="section === 'toolDocs' && selectedToolDoc">
+            <div class="panel">
+              <div class="card">
+                <div class="panel-header">
+                  <div>
+                    <div class="breadcrumbs"><span>Tool Docs</span><span>›</span><span x-text="selectedToolDoc.title"></span></div>
+                    <h2 x-text="selectedToolDoc.title"></h2>
+                  </div>
+                  <div class="toolbar">
+                    <button class="ghost-btn" @click="reindexToolDoc()">Reindex</button>
+                    <button class="ghost-btn" @click="clearSelection()">Clear</button>
+                  </div>
+                </div>
+                <div class="grid grid-2">
+                  <label><span class="required">Title</span><input type="text" x-model="selectedToolDoc.title" /></label>
+                  <label><span class="required">Repo URL</span><input type="text" x-model="selectedToolDoc.repo_url" /></label>
+                  <label style="grid-column: 1 / -1;"><span>Tags (comma separated)</span><input type="text" :value="(selectedToolDoc.tags || []).join(', ')" @change="selectedToolDoc.tags = $event.target.value.split(',').map(t => t.trim()).filter(Boolean)" /></label>
+                </div>
+                <div class="toolbar" style="margin-top: var(--space);">
+                  <button class="primary-btn" @click="saveToolDoc()">Save Changes</button>
+                </div>
+                <div x-show="selectedToolDoc.last_indexed_at" class="small muted" style="margin-top: var(--space);">Last indexed: <span x-text="selectedToolDoc.last_indexed_at ? new Date(selectedToolDoc.last_indexed_at).toLocaleString() : 'Never'"></span></div>
               </div>
             </div>
           </template>
         </div>
+      </main>
+    </div>
+
+    <div class="toast-stack" x-cloak>
+      <template x-for="toast in toasts" :key="toast.id">
+        <div class="toast" :class="toast.type" x-text="toast.message"></div>
       </template>
     </div>
 
-
-    <div class="main-content" x-show="activeSection === 'briefs'">
-      <div class="panel" x-show="selectedBrief">
-        <h2>Task Brief</h2>
-        <div class="danger-box" x-show="(selectedBrief?.completion_blockers || []).length">
-          <strong>Completion blockers</strong>
-          <ul><template x-for="blocker in (selectedBrief?.completion_blockers || [])" :key="blocker"><li x-text="blocker"></li></template></ul>
+    <div class="modal-backdrop" x-cloak x-show="modal" x-transition.opacity>
+      <div class="modal" @click.outside="closeModal()">
+        <div class="modal-header">
+          <div>
+            <h3 x-text="modalTitle()"></h3>
+            <div class="muted small">Create a new item in the current workflow context.</div>
+          </div>
+          <button class="ghost-btn" @click="closeModal()">Close</button>
         </div>
-        <div class="markdown" x-html="briefHtml"></div>
+        <form class="modal-body" @submit.prevent="submitModal()">
+          <template x-if="modal && modal.type === 'project'">
+            <div class="grid grid-2">
+              <label><span class="required">Title</span><input x-ref="modalFirst" type="text" x-model="modalForm.title" required /></label>
+              <label>
+                <span class="required">Status</span>
+                <select x-model="modalForm.status">
+                  <template x-for="status in projectStatuses" :key="status"><option :value="status" x-text="formatStatus(status)"></option></template>
+                </select>
+              </label>
+              <label><span class="required">Goal</span><input type="text" x-model="modalForm.goal" required /></label>
+              <label><span>Tags (comma separated)</span><input type="text" x-model="modalForm.tags_text" /></label>
+              <label class="grid" style="grid-column: 1 / -1;"><span>Description</span><textarea x-model="modalForm.description"></textarea></label>
+            </div>
+          </template>
+
+          <template x-if="modal && modal.type === 'epic'">
+            <div class="grid grid-2">
+              <label><span class="required">Title</span><input x-ref="modalFirst" type="text" x-model="modalForm.title" required /></label>
+              <label>
+                <span class="required">Project slug</span>
+                <input list="projects-datalist" type="text" x-model="modalForm.project_slug" placeholder="Type to search..." required />
+              </label>
+              <label>
+                <span class="required">Status</span>
+                <select x-model="modalForm.status">
+                  <template x-for="status in projectStatuses" :key="status"><option :value="status" x-text="formatStatus(status)"></option></template>
+                </select>
+              </label>
+              <label><span>Tags (comma separated)</span><input type="text" x-model="modalForm.tags_text" /></label>
+              <label><span>Blocked reason</span><input type="text" x-model="modalForm.blocked_reason" /></label>
+              <label class="grid" style="grid-column: 1 / -1;"><span>Description</span><textarea x-model="modalForm.description"></textarea></label>
+            </div>
+          </template>
+
+          <template x-if="modal && modal.type === 'task'">
+            <div class="grid grid-2">
+              <label><span class="required">Title</span><input x-ref="modalFirst" type="text" x-model="modalForm.title" required /></label>
+              <label>
+                <span class="required">Epic slug</span>
+                <input list="epics-datalist" type="text" x-model="modalForm.epic_slug" placeholder="Type to search..." required />
+              </label>
+              <label>
+                <span class="required">Status</span>
+                <select x-model="modalForm.status">
+                  <template x-for="status in taskStatuses" :key="status"><option :value="status" x-text="formatStatus(status)"></option></template>
+                </select>
+              </label>
+              <label><span>Assignee</span><input type="text" x-model="modalForm.assignee" /></label>
+              <label>
+                <span>Estimated effort</span>
+                <select x-model="modalForm.estimated_effort">
+                  <option value="">—</option>
+                  <option value="xs">XS</option>
+                  <option value="s">S</option>
+                  <option value="m">M</option>
+                  <option value="l">L</option>
+                  <option value="xl">XL</option>
+                </select>
+              </label>
+              <label><span>Tags (comma separated)</span><input type="text" x-model="modalForm.tags_text" /></label>
+              <label class="grid" style="grid-column: 1 / -1;"><span>Description</span><textarea x-model="modalForm.description"></textarea></label>
+              <label><span>Blocked reason</span><textarea x-model="modalForm.blocked_reason"></textarea></label>
+              <label><span>Context snapshot</span><textarea x-model="modalForm.context_snapshot"></textarea></label>
+            </div>
+          </template>
+
+          <template x-if="modal && modal.type === 'note'">
+            <div class="grid grid-2">
+              <label><span class="required">Title</span><input x-ref="modalFirst" type="text" x-model="modalForm.title" required /></label>
+              <label><span class="required">Tags (comma separated)</span><input type="text" x-model="modalForm.tags_text" placeholder="scope:project, api" required /></label>
+              <div class="error-text" x-show="modalForm.scopeError" x-text="modalForm.scopeError"></div>
+              <label class="grid" style="grid-column: 1 / -1;"><span class="required">Content</span><textarea x-model="modalForm.body" required></textarea></label>
+            </div>
+          </template>
+
+          <template x-if="modal && modal.type === 'designDoc'">
+            <div class="grid grid-2">
+              <label><span class="required">Title</span><input x-ref="modalFirst" type="text" x-model="modalForm.title" required /></label>
+              <label><span>Tags (comma separated)</span><input type="text" x-model="modalForm.tags_text" placeholder="scope:project, api" /></label>
+              <label><span>Link to Epic (optional)</span><input list="epics-datalist" type="text" x-model="modalForm.epic_slug" placeholder="Type to search..." /></label>
+              <label class="grid" style="grid-column: 1 / -1;"><span class="required">Content</span><textarea x-model="modalForm.content" required></textarea></label>
+            </div>
+          </template>
+
+          <template x-if="modal && modal.type === 'issue'">
+            <div class="grid grid-2">
+              <label><span class="required">Title</span><input x-ref="modalFirst" type="text" x-model="modalForm.title" required /></label>
+              <label>
+                <span class="required">Severity</span>
+                <select x-model="modalForm.severity">
+                  <option value="sev1">Sev1 — Critical</option>
+                  <option value="sev2">Sev2 — High</option>
+                  <option value="sev3">Sev3 — Low</option>
+                </select>
+              </label>
+              <label><span>Task slug</span><input list="tasks-datalist" type="text" x-model="modalForm.task_slug" placeholder="Type to search..." /></label>
+              <label><span>Linked runbook slugs (comma separated)</span><input list="runbooks-datalist" type="text" x-model="modalForm.linked_runbook_slugs_text" /></label>
+              <label><span>Triage steps</span><textarea x-model="modalForm.triage_steps"></textarea></label>
+              <label><span>Root cause</span><textarea x-model="modalForm.root_cause"></textarea></label>
+              <label><span>Resolution</span><textarea x-model="modalForm.resolution"></textarea></label>
+              <label><span>Lessons learned</span><textarea x-model="modalForm.lessons_learned"></textarea></label>
+            </div>
+          </template>
+
+          <template x-if="modal && modal.type === 'runbook'">
+            <div class="grid grid-2">
+              <label><span class="required">Title</span><input x-ref="modalFirst" type="text" x-model="modalForm.title" required /></label>
+              <label>
+                <span class="required">Status</span>
+                <select x-model="modalForm.status">
+                  <template x-for="status in runbookStatuses" :key="status"><option :value="status" x-text="formatStatus(status)"></option></template>
+                </select>
+              </label>
+              <label><span class="required">Service</span><input type="text" x-model="modalForm.service" placeholder="api" required /></label>
+              <label><span class="required">Category</span><input type="text" x-model="modalForm.category" placeholder="deployment" required /></label>
+              <label><span>Project (optional)</span><input list="projects-datalist" type="text" x-model="modalForm.project_slug" placeholder="Type to search..." /></label>
+              <label><span>Tags (comma separated)</span><input type="text" x-model="modalForm.tags_text" /></label>
+              <label><span>Linked issue slugs (comma separated)</span><input list="issues-datalist" type="text" x-model="modalForm.linked_issue_slugs_text" /></label>
+              <label><span>Symptoms</span><textarea x-model="modalForm.symptoms"></textarea></label>
+              <label><span>Prerequisites</span><textarea x-model="modalForm.prerequisites"></textarea></label>
+              <label class="grid" style="grid-column: 1 / -1;"><span class="required">Steps</span><textarea x-model="modalForm.steps" required></textarea></label>
+              <label><span>Verification</span><textarea x-model="modalForm.verification"></textarea></label>
+              <label><span>Escalation</span><textarea x-model="modalForm.escalation"></textarea></label>
+            </div>
+          </template>
+
+          <template x-if="modal && modal.type === 'contextDoc'">
+            <div class="grid grid-2">
+              <label><span class="required">Title</span><input x-ref="modalFirst" type="text" x-model="modalForm.title" required /></label>
+              <label><span>Tags (comma separated)</span><input type="text" x-model="modalForm.tags_text" /></label>
+              <label>
+                <span>Link to Entity (optional)</span>
+                <select x-model="modalForm.entity_type">
+                  <option value="">— None —</option>
+                  <option value="project">project</option>
+                  <option value="epic">epic</option>
+                  <option value="task">task</option>
+                </select>
+              </label>
+              <label>
+                <span>Entity Slug</span>
+                <input list="context-doc-entity-datalist" type="text" x-model="modalForm.entity_slug" placeholder="Slug..." :disabled="!modalForm.entity_type" />
+              </label>
+              <label class="grid" style="grid-column: 1 / -1;"><span class="required">Content (Markdown)</span><textarea x-model="modalForm.content" required></textarea></label>
+            </div>
+          </template>
+
+          <template x-if="modal && modal.type === 'toolDoc'">
+            <div class="grid grid-2">
+              <label><span class="required">Title</span><input x-ref="modalFirst" type="text" x-model="modalForm.title" required /></label>
+              <label><span class="required">Repo URL</span><input type="url" x-model="modalForm.repo_url" required /></label>
+              <label><span>Tags (comma separated)</span><input type="text" x-model="modalForm.tags_text" /></label>
+            </div>
+          </template>
+
+          <div class="toolbar">
+            <button class="primary-btn" type="submit">Create</button>
+            <button class="ghost-btn" type="button" @click="closeModal()">Cancel</button>
+          </div>
+        </form>
       </div>
-      <div class="empty-state panel" x-show="!selectedBrief">Select a task to render its markdown brief.</div>
     </div>
-  </main>
-</div>
-<div class="toast" x-show="toast" x-text="toast" x-cloak></div>
-<script>
-function app() {
-  return {
-    sections: [
-      { key: 'projects', label: 'Projects' },
-      { key: 'queue', label: 'Queue' },
-      { key: 'notes', label: 'Notes' },
-      { key: 'design_docs', label: 'Design Docs' },
-      { key: 'issues', label: 'Issues' },
-      { key: 'runbooks', label: 'Runbooks' },
-      { key: 'tool_docs', label: 'Tool Docs' },
-      { key: 'briefs', label: 'Brief Viewer' },
-    ],
-    activeSection: 'projects', error: null, toast: null,
-    projects: [], notes: [], noteTags: [], designDocs: [], selectedDocChunks: [], issues: [], runbooks: [],
-    queueTasks: [], queueStatusFilter: '', toolDocs: [],
-    selectedTaskSlug: '', selectedBrief: null, briefHtml: '', briefLookupSlug: '', selection: {},
-    taskDetail: { task: null, criteria: [], testingLayers: [], dod: { dod_description: '', checklist: [] } },
-    taskEditForm: { title: '', description: '', assignee: '', estimated_effort: '', tagsText: '', blocked_reason: '' },
-    taskIssues: [],
-    epicDetail: { epic: null, designDocs: [] },
-    epicEditForm: { title: '', description: '', tagsText: '', blocked_reason: '' },
-    projectDetail: null,
-    projectEditForm: { goal: '', description: '', tagsText: '', blocked_reason: '' },
-    newCriterion: '',
-    newTestingLayer: { layer: 'unit', description: '' },
-    noteSearch: '', noteSearchMode: 'text', noteFilterTag: '', showArchivedNotes: false,
-    issueStatus: '', issueSeverity: '', runbookService: '', runbookCategory: '', runbookStatus: '',
-    projectForm: { title: '', goal: '', description: '' },
-    epicForm: { project_slug: '', title: '', description: '' },
-    taskForm: { epic_slug: '', title: '', description: '', assignee: '', estimated_effort: '' },
-    subtaskForm: { task_slug: '', title: '', description: '' },
-    noteForm: { title: '', body: '', tagsText: '' },
-    designDocForm: { slug: '', title: '', content: '', tagsText: '', epicSlug: '' },
-    designDocLink: { epic_slug: '', design_doc_id: '' },
-    issueForm: { title: '', severity: 'sev2', task_slug: '', triage_steps: '', root_cause: '', resolution: '', lessons_learned: '' },
-    runbookForm: { title: '', service: '', category: '', status: 'draft', symptoms: '', prerequisites: '', steps: '', verification: '', escalation: '', linked_issue_ids_text: '' },
-    toolDocForm: { title: '', repo_url: '', tagsText: '' },
 
-    async init() { await Promise.all([this.refreshProjects(), this.fetchNotes(), this.fetchDesignDocs(), this.fetchIssues(), this.fetchRunbooks(), this.fetchQueue(), this.fetchToolDocs()]); },
-    async api(path, options = {}) {
-      const response = await fetch(`/api${path}`, { headers: { 'Content-Type': 'application/json' }, ...options });
-      const isJson = response.headers.get('content-type')?.includes('application/json');
-      const payload = isJson ? await response.json() : await response.text();
-      if (!response.ok) throw new Error(typeof payload === 'string' ? payload : JSON.stringify(payload));
-      return payload;
-    },
-    notify(message) { this.toast = message; setTimeout(() => this.toast = null, 2500); },
-    handleError(error) { this.error = error.message || String(error); },
-    tagsTextToArray(text) { return (text || '').split(',').map(v => v.trim()).filter(Boolean); },
+    <datalist id="projects-datalist">
+      <template x-for="p in allProjects" :key="p.slug"><option :value="p.slug" :label="p.title"></option></template>
+    </datalist>
+    <datalist id="epics-datalist">
+      <template x-for="e in allEpics" :key="e.slug"><option :value="e.slug" :label="e.title"></option></template>
+    </datalist>
+    <datalist id="tasks-datalist">
+      <template x-for="t in allTasks" :key="t.slug"><option :value="t.slug" :label="t.title"></option></template>
+    </datalist>
+    <datalist id="design-docs-datalist">
+      <template x-for="d in allDesignDocs" :key="d.slug"><option :value="d.slug" :label="d.title"></option></template>
+    </datalist>
+    <datalist id="runbooks-datalist">
+      <template x-for="r in allRunbooks" :key="r.slug"><option :value="r.slug" :label="r.title"></option></template>
+    </datalist>
+    <datalist id="issues-datalist">
+      <template x-for="i in allIssues" :key="i.slug"><option :value="i.slug" :label="i.title"></option></template>
+    </datalist>
+  </div>
 
-    async refreshProjects() {
-      try {
-        const projects = await this.api('/projects');
-        for (const project of projects) {
-          project.expanded = true;
-          project.epics = await this.api(`/projects/${project.slug}/epics`);
-          for (const epic of project.epics) {
-            epic.expanded = true;
-            epic.tasks = await this.api(`/epics/${epic.slug}/tasks`);
-            for (const task of epic.tasks) {
-              task.subtasks = await this.api(`/tasks/${task.slug}/subtasks`);
+  <script>
+    function workManager() {
+      return {
+        section: 'queue',
+        queueFilter: 'active',
+        queueTasks: [],
+        selectedTask: null,
+        loadingDetail: false,
+        briefOpen: false,
+        briefContent: '',
+        siblingTasks: [],
+
+        projects: [],
+        allProjects: [],
+        allEpics: [],
+        allTasks: [],
+        allDesignDocs: [],
+
+        selectedProject: null,
+        selectedEpic: null,
+        showArchivedProjects: false,
+        expandedProjects: {},
+        expandedEpics: {},
+
+        notes: [],
+        noteFilter: '',
+        noteTagFilter: '',
+        selectedNote: null,
+
+        designDocs: [],
+        designDocFilter: '',
+        selectedDesignDoc: null,
+
+        issues: [],
+        issueFilter: '',
+        selectedIssue: null,
+
+        runbooks: [],
+        runbookFilter: '',
+        runbookProjectFilter: '',
+        selectedRunbook: null,
+        allRunbooks: [],
+        allIssues: [],
+
+        contextDocs: [],
+        contextDocFilter: '',
+        selectedContextDoc: null,
+        allContextDocs: [],
+
+        toolDocs: [],
+        selectedToolDoc: null,
+
+        modal: null,
+        modalForm: {},
+
+        toasts: [],
+        apiError: null,
+
+        loadingList: false,
+        noteInlineError: '',
+        accordions: {
+          criteria: true,
+          testing: true,
+          dod: true,
+          brief: false,
+          issues: true,
+          siblings: false,
+          taskContextDocs: false,
+          contextDocLinks: true,
+        },
+        projectStatuses: ['draft', 'active', 'on_hold', 'complete'],
+        taskStatuses: ['draft', 'in_progress', 'in_review', 'complete', 'blocked', 'abandoned'],
+        runbookStatuses: ['draft', 'active', 'deprecated'],
+        queueFilters: [
+          { label: 'Active', value: 'active' },
+          { label: 'All', value: 'all' },
+          { label: 'Draft', value: 'draft' },
+          { label: 'In Progress', value: 'in_progress' },
+          { label: 'In Review', value: 'in_review' },
+          { label: 'Complete', value: 'complete' },
+          { label: 'Blocked', value: 'blocked' },
+          { label: 'Abandoned', value: 'abandoned' },
+        ],
+
+        async init() {
+          await this.refreshProjects();
+          await this.loadQueue();
+          try {
+            const [allDD, allI, allR, allCD] = await Promise.all([
+              this.api('GET', '/api/design-docs'),
+              this.api('GET', '/api/issues'),
+              this.api('GET', '/api/runbooks'),
+              this.api('GET', '/api/context-docs'),
+            ]);
+            this.allDesignDocs = (allDD || []).map(d => ({ id: d.id, slug: d.slug, title: d.title }));
+            this.allIssues = (allI || []).map(i => ({ id: i.id, slug: i.slug, title: i.title }));
+            this.allRunbooks = (allR || []).map(r => ({ id: r.id, slug: r.slug, title: r.title }));
+            this.allContextDocs = (allCD || []).map(d => ({ id: d.id, slug: d.slug, title: d.title }));
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async api(method, path, body) {
+          this.apiError = null;
+          const opts = { method, headers: { 'Content-Type': 'application/json' } };
+          if (body) opts.body = JSON.stringify(body);
+          const r = await fetch(path, opts);
+          if (!r.ok) {
+            const err = await r.text();
+            throw { status: r.status, message: err || 'Request failed' };
+          }
+          if (r.status === 204) return null;
+          return r.json();
+        },
+
+        async apiText(path) {
+          this.apiError = null;
+          const r = await fetch(path);
+          if (!r.ok) {
+            const err = await r.text();
+            throw { status: r.status, message: err || 'Request failed' };
+          }
+          return r.text();
+        },
+
+        handleError(err, fallback = 'Request failed') {
+          const message = err?.message || fallback;
+          this.apiError = message;
+          this.showToast(message, 'error');
+        },
+
+        showToast(message, type = 'success') {
+          const id = Date.now() + Math.random();
+          this.toasts.push({ id, message, type });
+          setTimeout(() => {
+            this.toasts = this.toasts.filter(t => t.id !== id);
+          }, 3000);
+        },
+
+        sectionTitle() {
+          return {
+            queue: 'Queue',
+            projects: 'Projects',
+            notes: 'Notes',
+            designDocs: 'Design Docs',
+            contextDocs: 'Context Docs',
+            issues: 'Issues',
+            runbooks: 'Runbooks',
+            toolDocs: 'Tool Docs',
+          }[this.section];
+        },
+
+        sectionSubtitle() {
+          return {
+            queue: 'Find and work the next task.',
+            projects: 'Browse the project hierarchy.',
+            notes: 'Scoped context and decisions.',
+            designDocs: 'Long-form design decisions.',
+            contextDocs: 'Attachable reference documents.',
+            issues: 'Track task-linked problems.',
+            runbooks: 'Operational response guides.',
+            toolDocs: 'Indexed external documentation.',
+          }[this.section];
+        },
+
+        sectionCreateLabel() {
+          return {
+            queue: '+ New Task',
+            projects: '+ New Project',
+            notes: '+ New Note',
+            designDocs: '+ New Design Doc',
+            contextDocs: '+ New Context Doc',
+            issues: '+ New Issue',
+            runbooks: '+ New Runbook',
+            toolDocs: '+ New Tool Doc',
+          }[this.section];
+        },
+
+        async switchSection(section) {
+          this.section = section;
+          this.apiError = null;
+          this.selectedTask = null;
+          if (section !== 'projects') { this.selectedProject = null; this.selectedEpic = null; }
+          if (section !== 'notes') this.selectedNote = null;
+          if (section !== 'designDocs') this.selectedDesignDoc = null;
+          if (section !== 'contextDocs') this.selectedContextDoc = null;
+          if (section !== 'issues') this.selectedIssue = null;
+          if (section !== 'runbooks') this.selectedRunbook = null;
+          if (section !== 'toolDocs') this.selectedToolDoc = null;
+          if (section === 'queue') await this.loadQueue();
+          if (section === 'projects') await this.refreshProjects();
+          if (section === 'notes') await this.loadNotes();
+          if (section === 'designDocs') await this.loadDesignDocs();
+          if (section === 'contextDocs') await this.loadContextDocs();
+          if (section === 'issues') await this.loadIssues();
+          if (section === 'runbooks') await this.loadRunbooks();
+          if (section === 'toolDocs') await this.loadToolDocs();
+        },
+
+        clearSelection() {
+          if (this.section === 'queue') {
+            this.selectedTask = null;
+            return;
+          }
+          if (this.section === 'projects') {
+            this.selectedProject = null;
+            this.selectedEpic = null;
+            this.selectedTask = null;
+            return;
+          }
+          if (this.section === 'notes') this.selectedNote = null;
+          if (this.section === 'designDocs') this.selectedDesignDoc = null;
+          if (this.section === 'contextDocs') this.selectedContextDoc = null;
+          if (this.section === 'issues') this.selectedIssue = null;
+          if (this.section === 'runbooks') this.selectedRunbook = null;
+          if (this.section === 'toolDocs') this.selectedToolDoc = null;
+        },
+
+        formatStatus(status) {
+          return (status || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        },
+
+        statusClass(status) {
+          return `status-${status || 'draft'}`;
+        },
+
+        formatCsv(value) {
+          if (Array.isArray(value)) return value.join(', ');
+          return value || '';
+        },
+
+        csvToArray(value) {
+          return (value || '').split(',').map(v => v.trim()).filter(Boolean);
+        },
+
+        renderMarkdown(content) {
+          return marked.parse(content || '');
+        },
+
+        handleEscape() {
+          if (this.modal) this.closeModal();
+        },
+
+        defaultModalForm(type, data = {}) {
+          const base = {
+            project: { title: '', goal: '', description: '', status: 'draft', tags_text: '' },
+            epic: { title: '', description: '', project_slug: '', status: 'draft', tags_text: '', blocked_reason: '' },
+            task: { title: '', description: '', status: 'draft', epic_slug: '', assignee: '', estimated_effort: '', tags_text: '', blocked_reason: '', context_snapshot: '' },
+           note: { title: '', body: '', tags_text: '', scopeError: '' },
+           designDoc: { title: '', content: '', tags_text: '', epic_slug: '' },
+           issue: { title: '', severity: 'sev2', task_slug: '', linked_runbook_slugs_text: '', triage_steps: '', root_cause: '', resolution: '', lessons_learned: '' },
+           runbook: { title: '', service: '', category: '', steps: '', status: 'draft', tags_text: '', symptoms: '', prerequisites: '', verification: '', escalation: '', linked_issue_slugs_text: '', project_slug: '' },
+           contextDoc: { title: '', content: '', tags_text: '', entity_type: '', entity_slug: '' },
+            toolDoc: { title: '', repo_url: '', tags_text: '' },
+          };
+          return { ...base[type], ...data };
+        },
+
+        openModal(type, data = {}) {
+          this.modal = { type, mode: 'create', data };
+          this.modalForm = this.defaultModalForm(type, data);
+          this.$nextTick(() => this.$refs.modalFirst?.focus());
+        },
+
+        closeModal() {
+          this.modal = null;
+          this.modalForm = {};
+        },
+
+        openCreateForSection() {
+          if (this.section === 'queue') this.openModal('task');
+          if (this.section === 'projects') this.openModal('project');
+          if (this.section === 'notes') this.openModal('note');
+          if (this.section === 'designDocs') this.openModal('designDoc');
+          if (this.section === 'contextDocs') this.openModal('contextDoc');
+          if (this.section === 'issues') this.openModal('issue', this.selectedTask ? { task_slug: this.selectedTask.slug } : {});
+          if (this.section === 'runbooks') this.openModal('runbook');
+          if (this.section === 'toolDocs') this.openModal('toolDoc');
+        },
+
+        modalTitle() {
+          if (!this.modal) return '';
+          const labels = { designDoc: 'Design Doc', contextDoc: 'Context Doc', toolDoc: 'Tool Doc' };
+          const t = this.modal.type;
+          return `New ${labels[t] || (t.charAt(0).toUpperCase() + t.slice(1))}`;
+        },
+
+        validateNoteTags(tags) {
+          return (tags || []).some(tag => tag.startsWith('scope:'));
+        },
+
+        async submitModal() {
+          if (!this.modal) return;
+          try {
+            let result = null;
+            if (this.modal.type === 'project') {
+              result = await this.api('POST', '/api/projects', {
+                title: this.modalForm.title,
+                goal: this.modalForm.goal,
+                description: this.modalForm.description,
+                status: this.modalForm.status,
+                tags: this.csvToArray(this.modalForm.tags_text),
+              });
+              await this.refreshProjects();
+              if (result?.slug) this.openProjectBySlug(result.slug);
             }
+            if (this.modal.type === 'epic') {
+              const projectSlug = this.modalForm.project_slug;
+              result = await this.api('POST', `/api/projects/${projectSlug}/epics`, {
+                title: this.modalForm.title,
+                description: this.modalForm.description,
+                status: this.modalForm.status,
+                tags: this.csvToArray(this.modalForm.tags_text),
+                blocked_reason: this.modalForm.blocked_reason || null,
+              });
+              await this.refreshProjects();
+              if (result?.slug) this.openEpicBySlug(result.slug);
+            }
+            if (this.modal.type === 'task') {
+              const epicSlug = this.modalForm.epic_slug;
+              result = await this.api('POST', `/api/epics/${epicSlug}/tasks`, {
+                title: this.modalForm.title,
+                description: this.modalForm.description || null,
+                status: this.modalForm.status,
+                assignee: this.modalForm.assignee || null,
+                estimated_effort: this.modalForm.estimated_effort || null,
+                tags: this.csvToArray(this.modalForm.tags_text),
+                blocked_reason: this.modalForm.blocked_reason || null,
+                context_snapshot: this.modalForm.context_snapshot || null,
+              });
+              await Promise.all([this.refreshProjects(), this.loadQueue()]);
+              if (result?.slug) await this.openTaskFromSlug(result.slug, this.section === 'projects' ? 'projects' : 'queue');
+            }
+            if (this.modal.type === 'note') {
+              const tags = this.csvToArray(this.modalForm.tags_text);
+              if (!this.validateNoteTags(tags)) {
+                this.modalForm.scopeError = 'At least one tag must start with scope:.';
+                return;
+              }
+              result = await this.api('POST', '/api/notes', {
+                title: this.modalForm.title,
+                body: this.modalForm.body,
+                tags,
+              });
+              await this.loadNotes();
+              if (result?.slug) await this.loadNoteDetail(result.slug);
+            }
+            if (this.modal.type === 'designDoc') {
+              result = await this.api('POST', '/api/design-docs', {
+                title: this.modalForm.title,
+                content: this.modalForm.content,
+                tags: this.csvToArray(this.modalForm.tags_text),
+                epic_slug: this.modalForm.epic_slug || null,
+              });
+              await this.loadDesignDocs();
+              if (result?.slug) await this.loadDesignDocDetail(result.slug);
+            }
+            if (this.modal.type === 'issue') {
+              const linkedRunbookIds = this.csvToArray(this.modalForm.linked_runbook_slugs_text)
+                .map(s => { const r = this.allRunbooks.find(x => x.slug === s.trim()); return r ? r.id : null; })
+                .filter(id => id !== null);
+              result = await this.api('POST', '/api/issues', {
+                title: this.modalForm.title,
+                severity: this.modalForm.severity,
+                task_slug: this.modalForm.task_slug || null,
+                linked_runbook_ids: linkedRunbookIds,
+                triage_steps: this.modalForm.triage_steps || null,
+                root_cause: this.modalForm.root_cause || null,
+                resolution: this.modalForm.resolution || null,
+                lessons_learned: this.modalForm.lessons_learned || null,
+              });
+              await this.loadIssues();
+              this.allIssues = (await this.api('GET', '/api/issues')).map(i => ({ id: i.id, slug: i.slug, title: i.title }));
+              if (this.selectedTask?.slug === this.modalForm.task_slug) await this.loadTaskDetail(this.selectedTask.slug);
+              if (result?.slug && this.section === 'issues') await this.loadIssueDetail(result.slug);
+            }
+            if (this.modal.type === 'runbook') {
+              const linkedIssueIds = this.csvToArray(this.modalForm.linked_issue_slugs_text)
+                .map(s => { const i = this.allIssues.find(x => x.slug === s.trim()); return i ? i.id : null; })
+                .filter(id => id !== null);
+              result = await this.api('POST', '/api/runbooks', {
+                title: this.modalForm.title,
+                service: this.modalForm.service,
+                category: this.modalForm.category,
+                steps: this.modalForm.steps,
+                status: this.modalForm.status,
+                tags: this.csvToArray(this.modalForm.tags_text),
+                symptoms: this.modalForm.symptoms || null,
+                prerequisites: this.modalForm.prerequisites || null,
+                verification: this.modalForm.verification || null,
+                escalation: this.modalForm.escalation || null,
+                linked_issue_ids: linkedIssueIds,
+                project_slug: this.modalForm.project_slug || null,
+              });
+              await this.loadRunbooks();
+              this.allRunbooks = (await this.api('GET', '/api/runbooks')).map(r => ({ id: r.id, slug: r.slug, title: r.title }));
+              if (result?.slug) await this.loadRunbookDetail(result.slug);
+            }
+            if (this.modal.type === 'contextDoc') {
+              result = await this.api('POST', '/api/context-docs', {
+                title: this.modalForm.title,
+                content: this.modalForm.content,
+                tags: this.csvToArray(this.modalForm.tags_text),
+                entity_type: this.modalForm.entity_type || null,
+                entity_slug: this.modalForm.entity_slug || null,
+              });
+              await this.loadContextDocs();
+              if (result?.slug) {
+                if (this.section !== 'contextDocs') await this.switchSection('contextDocs');
+                await this.loadContextDocDetail(result.slug);
+              }
+            }
+            if (this.modal.type === 'toolDoc') {
+              result = await this.api('POST', '/api/tool-docs', {
+                title: this.modalForm.title,
+                repo_url: this.modalForm.repo_url,
+                tags: this.csvToArray(this.modalForm.tags_text),
+              });
+              await this.loadToolDocs();
+              if (result?.slug) await this.loadToolDocDetail(result.slug);
+            }
+            this.showToast(`${this.modalTitle()} created.`);
+            this.closeModal();
+          } catch (err) {
+            this.handleError(err);
           }
-        }
-        this.projects = projects;
-      } catch (error) { this.handleError(error); }
-    },
-    async createProject() {
-      try { await this.api('/projects', { method: 'POST', body: JSON.stringify(this.projectForm) }); this.projectForm = { title: '', goal: '', description: '' }; await this.refreshProjects(); this.notify('Project created'); } catch (error) { this.handleError(error); }
-    },
-    async createEpic() {
-      try { await this.api(`/projects/${this.epicForm.project_slug}/epics`, { method: 'POST', body: JSON.stringify({ title: this.epicForm.title, description: this.epicForm.description }) }); this.epicForm = { project_slug: '', title: '', description: '' }; await this.refreshProjects(); this.notify('Epic created'); } catch (error) { this.handleError(error); }
-    },
-    async createTask() {
-      try { await this.api(`/epics/${this.taskForm.epic_slug}/tasks`, { method: 'POST', body: JSON.stringify({ title: this.taskForm.title, description: this.taskForm.description, assignee: this.taskForm.assignee || null, estimated_effort: this.taskForm.estimated_effort || null }) }); this.taskForm = { epic_slug: '', title: '', description: '', assignee: '', estimated_effort: '' }; await this.refreshProjects(); this.notify('Task created'); } catch (error) { this.handleError(error); }
-    },
-    async createSubtask() {
-      try { await this.api(`/tasks/${this.subtaskForm.task_slug}/subtasks`, { method: 'POST', body: JSON.stringify({ title: this.subtaskForm.title, description: this.subtaskForm.description }) }); this.subtaskForm = { task_slug: '', title: '', description: '' }; await this.refreshProjects(); this.notify('Subtask created'); } catch (error) { this.handleError(error); }
-    },
-    async selectTask(slug) {
-      this.selection = { type: 'task', slug };
-      this.subtaskForm.task_slug = slug;
-      this.taskDetail = { task: null, criteria: [], testingLayers: [], dod: { dod_description: '', checklist: [] } };
-      this.taskIssues = [];
-      await this.loadTaskDetail(slug);
-    },
-    async loadTaskDetail(slug) {
-      try {
-        const [task, criteria, testingLayers, dod, issues] = await Promise.all([
-          this.api(`/tasks/${slug}`),
-          this.api(`/tasks/${slug}/acceptance-criteria`),
-          this.api(`/tasks/${slug}/testing-layers`),
-          this.api(`/tasks/${slug}/dod`),
-          this.api(`/issues?task=${slug}`),
-        ]);
-        this.taskDetail = { task, criteria, testingLayers, dod: { dod_description: dod.dod_description || '', checklist: dod.checklist || [] } };
-        this.taskEditForm = {
-          title: task.title || '',
-          description: task.description || '',
-          assignee: task.assignee || '',
-          estimated_effort: task.estimated_effort || '',
-          tagsText: (task.tags || []).join(', '),
-          blocked_reason: task.blocked_reason || '',
-        };
-        this.taskIssues = issues;
-      } catch (error) { this.handleError(error); }
-    },
-    async saveTaskEdit() {
-      const payload = {
-        title: this.taskEditForm.title || undefined,
-        description: this.taskEditForm.description || undefined,
-        assignee: this.taskEditForm.assignee || null,
-        estimated_effort: this.taskEditForm.estimated_effort || null,
-        tags: this.tagsTextToArray(this.taskEditForm.tagsText),
-        blocked_reason: this.taskEditForm.blocked_reason || null,
-      };
-      try {
-        const task = await this.api(`/tasks/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
-        this.taskDetail.task = task;
-        await this.refreshProjects();
-        this.notify('Task saved');
-      } catch (error) { this.handleError(error); }
-    },
-    async addCriterion() {
-      if (!this.newCriterion.trim()) return;
-      try {
-        const item = await this.api(`/tasks/${this.selection.slug}/acceptance-criteria`, { method: 'POST', body: JSON.stringify({ description: this.newCriterion.trim() }) });
-        this.taskDetail.criteria.push(item);
-        this.newCriterion = '';
-      } catch (error) { this.handleError(error); }
-    },
-    async toggleCriterion(id, verified) {
-      try {
-        const item = await this.api(`/tasks/${this.selection.slug}/acceptance-criteria/${id}`, { method: 'PATCH', body: JSON.stringify({ verified }) });
-        const idx = this.taskDetail.criteria.findIndex(c => c.id === id);
-        if (idx >= 0) this.taskDetail.criteria[idx] = item;
-      } catch (error) { this.handleError(error); }
-    },
-    async addTestingLayer() {
-      if (!this.newTestingLayer.description.trim()) return;
-      try {
-        const item = await this.api(`/tasks/${this.selection.slug}/testing-layers`, { method: 'POST', body: JSON.stringify({ layer: this.newTestingLayer.layer, description: this.newTestingLayer.description.trim() }) });
-        this.taskDetail.testingLayers.push(item);
-        this.newTestingLayer.description = '';
-      } catch (error) { this.handleError(error); }
-    },
-    async updateTestingLayerStatus(id, status) {
-      try {
-        const item = await this.api(`/tasks/${this.selection.slug}/testing-layers/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
-        const idx = this.taskDetail.testingLayers.findIndex(t => t.id === id);
-        if (idx >= 0) this.taskDetail.testingLayers[idx] = item;
-      } catch (error) { this.handleError(error); }
-    },
-    async updateTaskStatus(status) {
-      try {
-        const task = await this.api(`/tasks/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify({ status }) });
-        this.taskDetail.task = task;
-        await this.refreshProjects();
-      } catch (error) { this.handleError(error); }
-    },
-    async saveDoD() {
-      try {
-        const dod = await this.api(`/tasks/${this.selection.slug}/dod`, { method: 'PATCH', body: JSON.stringify({ dod_description: this.taskDetail.dod.dod_description }) });
-        this.taskDetail.dod = { dod_description: dod.dod_description || '', checklist: dod.checklist || [] };
-        this.notify('DoD saved');
-      } catch (error) { this.handleError(error); }
-    },
-    async loadBriefBySlug(slug = null) {
-      const target = slug || this.briefLookupSlug || this.selectedTaskSlug;
-      if (!target) return;
-      try {
-        this.selectedTaskSlug = target;
-        this.selectedBrief = await this.api(`/briefs/task/${target}`);
-        const markdown = await this.api(`/briefs/task/${target}/markdown`);
-        this.briefHtml = marked.parse(markdown);
-      } catch (error) { this.handleError(error); }
-    },
+        },
 
-    noteHasScopeTag() { return this.tagsTextToArray(this.noteForm.tagsText).some(tag => tag.startsWith('scope:')); },
-    resetNoteForm() { this.selection = {}; this.noteForm = { title: '', body: '', tagsText: '' }; },
-    async fetchNotes() {
-      try {
-        const params = new URLSearchParams();
-        if (this.noteFilterTag) params.set('tag', this.noteFilterTag);
-        if (this.showArchivedNotes) params.set('include_archived', 'true');
-        if (this.noteSearch && this.noteSearchMode === 'semantic') params.set('q', this.noteSearch);
-        let notes = await this.api(`/notes?${params.toString()}`);
-        if (this.noteSearch && this.noteSearchMode === 'text') {
-          const q = this.noteSearch.toLowerCase();
-          notes = notes.filter(note => `${note.title} ${note.body} ${(note.tags || []).join(' ')}`.toLowerCase().includes(q));
-        }
-        this.notes = notes;
-        this.noteTags = [...new Set(notes.flatMap(note => note.tags || []))].sort();
-      } catch (error) { this.handleError(error); }
-    },
-    async saveNote() {
-      const payload = { title: this.noteForm.title, body: this.noteForm.body, tags: this.tagsTextToArray(this.noteForm.tagsText) };
-      try {
-        if (this.selection.type === 'note') {
-          await this.api(`/notes/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
-        } else {
-          await this.api('/notes', { method: 'POST', body: JSON.stringify(payload) });
-        }
-        this.resetNoteForm(); await this.fetchNotes(); this.notify('Note saved');
-      } catch (error) { this.handleError(error); }
-    },
-    async archiveSelectedNote() {
-      if (this.selection.type !== 'note') return;
-      if (!confirm('Archive this note? It will be hidden from normal searches but remains queryable.')) return;
-      try { await this.api(`/notes/${this.selection.slug}/archive`, { method: 'POST' }); this.resetNoteForm(); await this.fetchNotes(); this.notify('Note archived'); } catch (error) { this.handleError(error); }
-    },
-
-    resetDesignDocForm() { this.selection = {}; this.designDocForm = { slug: '', title: '', content: '', tagsText: '', epicSlug: '' }; this.selectedDocChunks = []; },
-    async fetchDesignDocs() { try { this.designDocs = await this.api('/design-docs'); } catch (error) { this.handleError(error); } },
-    async selectDesignDoc(doc) {
-      this.selection = { type: 'design_doc', slug: doc.slug };
-      this.designDocForm = { slug: doc.slug, title: doc.title, content: doc.content, tagsText: (doc.tags || []).join(', ') };
-      this.designDocLink.design_doc_id = doc.id;
-      try { this.selectedDocChunks = await this.api(`/design-docs/${doc.slug}/chunks`); } catch (error) { this.handleError(error); }
-    },
-    async saveDesignDoc() {
-      const payload = { title: this.designDocForm.title, content: this.designDocForm.content, tags: this.tagsTextToArray(this.designDocForm.tagsText) };
-      try {
-        if (this.selection.type === 'design_doc') {
-          await this.api(`/design-docs/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
-        } else {
-          const doc = await this.api('/design-docs', { method: 'POST', body: JSON.stringify(payload) });
-          if (this.designDocForm.epicSlug.trim()) {
-            await this.api(`/epics/${this.designDocForm.epicSlug.trim()}/design-docs`, { method: 'POST', body: JSON.stringify({ design_doc_id: doc.id }) });
+        async refreshProjects() {
+          try {
+            const [projectsData, epicsData, tasksData] = await Promise.all([
+              this.api('GET', '/api/projects'),
+              this.api('GET', '/api/epics'),
+              this.api('GET', '/api/tasks'),
+            ]);
+            this.allProjects = (projectsData || []).map(p => ({ slug: p.slug, title: p.title, status: p.status }));
+            this.allEpics = epicsData || [];
+            this.allTasks = tasksData || [];
+            this.projects = (projectsData || []).map(p => ({
+              ...p,
+              epics: (epicsData || []).filter(e => e.project_slug === p.slug).map(e => ({
+                ...e,
+                tasks: (tasksData || []).filter(t => t.epic_slug === e.slug),
+              })),
+            }));
+          } catch (err) {
+            this.handleError(err);
           }
-        }
-        await this.fetchDesignDocs(); this.notify('Design doc saved');
-      } catch (error) { this.handleError(error); }
-    },
-    async loadDocFile(event) {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      this.designDocForm.content = await file.text();
-      if (!this.designDocForm.title) this.designDocForm.title = file.name;
-    },
-    async linkDesignDoc() {
-      try { await this.api(`/epics/${this.designDocLink.epic_slug}/design-docs`, { method: 'POST', body: JSON.stringify({ design_doc_id: Number(this.designDocLink.design_doc_id) }) }); this.notify('Design doc linked'); } catch (error) { this.handleError(error); }
-    },
+        },
 
-    resetIssueForm() { this.selection = {}; this.issueForm = { title: '', severity: 'sev2', task_slug: '', triage_steps: '', root_cause: '', resolution: '', lessons_learned: '' }; },
-    async fetchIssues() {
-      try {
-        const params = new URLSearchParams();
-        if (this.issueStatus) params.set('status', this.issueStatus);
-        if (this.issueSeverity) params.set('severity', this.issueSeverity);
-        this.issues = await this.api(`/issues?${params.toString()}`);
-      } catch (error) { this.handleError(error); }
-    },
-    async saveIssue() {
-      const payload = { ...this.issueForm, task_slug: this.issueForm.task_slug || null };
-      try {
-        if (this.selection.type === 'issue') {
-          await this.api(`/issues/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
-        } else {
-          await this.api('/issues', { method: 'POST', body: JSON.stringify(payload) });
-        }
-        this.resetIssueForm(); await this.fetchIssues(); this.notify('Issue saved');
-      } catch (error) { this.handleError(error); }
-    },
-    async resolveSelectedIssue() {
-      if (this.selection.type !== 'issue') return;
-      if (!confirm('Mark this issue as resolved? All sections (triage, root cause, resolution, lessons learned) must be filled.')) return;
-      try { await this.api(`/issues/${this.selection.slug}/resolve`, { method: 'POST' }); await this.fetchIssues(); this.notify('Issue resolved'); } catch (error) { this.handleError(error); }
-    },
+        async loadQueue() {
+          this.loadingList = true;
+          try {
+            if (this.queueFilter === 'active') {
+              const [ip, draft] = await Promise.all([
+                this.api('GET', '/api/tasks?status=in_progress'),
+                this.api('GET', '/api/tasks?status=draft'),
+              ]);
+              this.queueTasks = [...(ip || []), ...(draft || [])];
+            } else if (this.queueFilter === 'all') {
+              this.queueTasks = await this.api('GET', '/api/tasks');
+            } else {
+              this.queueTasks = await this.api('GET', `/api/tasks?status=${this.queueFilter}`);
+            }
+            if (this.section === 'queue' && (!this.selectedTask || !this.queueTasks.some(t => t.slug === this.selectedTask.slug))) {
+              this.selectedTask = null;
+            }
+          } catch (err) {
+            this.handleError(err);
+          } finally {
+            this.loadingList = false;
+          }
+        },
 
-    resetRunbookForm() { this.selection = {}; this.runbookForm = { title: '', service: '', category: '', status: 'draft', symptoms: '', prerequisites: '', steps: '', verification: '', escalation: '', linked_issue_ids_text: '' }; },
-    async fetchRunbooks() {
-      try {
-        const params = new URLSearchParams();
-        if (this.runbookService) params.set('service', this.runbookService);
-        if (this.runbookCategory) params.set('category', this.runbookCategory);
-        if (this.runbookStatus) params.set('status', this.runbookStatus);
-        this.runbooks = await this.api(`/runbooks?${params.toString()}`);
-      } catch (error) { this.handleError(error); }
-    },
-    async saveRunbook() {
-      const payload = { ...this.runbookForm, linked_issue_ids: this.tagsTextToArray(this.runbookForm.linked_issue_ids_text).map(Number).filter(Boolean) };
-      delete payload.linked_issue_ids_text;
-      try {
-        if (this.selection.type === 'runbook') {
-          await this.api(`/runbooks/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
-        } else {
-          await this.api('/runbooks', { method: 'POST', body: JSON.stringify(payload) });
-        }
-        this.resetRunbookForm(); await this.fetchRunbooks(); this.notify('Runbook saved');
-      } catch (error) { this.handleError(error); }
-    },
-    async validateSelectedRunbook() {
-      if (this.selection.type !== 'runbook') return;
-      try { await this.api(`/runbooks/${this.selection.slug}/validate`, { method: 'POST' }); await this.fetchRunbooks(); this.notify('Runbook validated'); } catch (error) { this.handleError(error); }
-    },
+        async setQueueFilter(filter) {
+          this.queueFilter = filter;
+          await this.loadQueue();
+        },
 
-    async selectProject(slug) {
-      try {
-        this.projectDetail = await this.api(`/projects/${slug}`);
-        this.projectEditForm = {
-          goal: this.projectDetail.goal || '',
-          description: this.projectDetail.description || '',
-          tagsText: (this.projectDetail.tags || []).join(', '),
-          blocked_reason: this.projectDetail.blocked_reason || '',
-        };
-      } catch (error) { this.handleError(error); }
-    },
-    async updateProjectStatus(status) {
-      try {
-        this.projectDetail = await this.api(`/projects/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify({ status }) });
-        await this.refreshProjects();
-      } catch (error) { this.handleError(error); }
-    },
-    async saveProjectEdit() {
-      const payload = {
-        goal: this.projectEditForm.goal || undefined,
-        description: this.projectEditForm.description || undefined,
-        tags: this.tagsTextToArray(this.projectEditForm.tagsText),
-        blocked_reason: this.projectEditForm.blocked_reason || null,
+        async loadTaskDetail(slug) {
+          this.loadingDetail = true;
+          this.selectedTask = null;
+          this.briefContent = '';
+          this.briefOpen = false;
+          try {
+           const [task, criteria, layers, dod, issues, contextDocsLinks] = await Promise.all([
+              this.api('GET', `/api/tasks/${slug}`),
+             this.api('GET', `/api/tasks/${slug}/acceptance-criteria`),
+             this.api('GET', `/api/tasks/${slug}/testing-layers`),
+             this.api('GET', `/api/tasks/${slug}/dod`),
+             this.api('GET', `/api/issues?task=${encodeURIComponent(slug)}`),
+             this.api('GET', `/api/context-docs?entity_type=task&entity_slug=${encodeURIComponent(slug)}`),
+            ]);
+            this.selectedTask = {
+              ...task,
+             acceptance_criteria: criteria || [],
+             testing_layers: layers || [],
+             dod: dod || {},
+             linked_issues: issues || [],
+             context_docs: contextDocsLinks || [],
+              _newCriterion: { description: '' },
+              _newLayer: { layer: '', description: '' },
+              _dodDraft: {
+                dod_description: dod?.dod_description || dod?.description || '',
+                checklist: Array.isArray(dod?.checklist) ? dod.checklist : [],
+              },
+            };
+            this.siblingTasks = this.allTasks.filter(t => t.epic_slug === task.epic_slug && t.slug !== slug);
+            this.selectedEpic = this.allEpics.find(e => e.slug === task.epic_slug) || null;
+            this.selectedProject = this.getProjectForEpic(this.selectedEpic);
+            if (this.selectedProject) this.expandedProjects[this.selectedProject.slug] = true;
+            if (this.selectedEpic) this.expandedEpics[this.selectedEpic.slug] = true;
+          } catch (err) {
+            this.handleError(err);
+          } finally {
+            this.loadingDetail = false;
+          }
+        },
+
+        getProjectForEpic(epic) {
+          if (!epic) return null;
+          return this.projects.find(p => p.slug === epic.project_slug || (p.epics || []).some(e => e.slug === epic.slug)) || null;
+        },
+
+        taskBreadcrumbs(task) {
+          const epic = this.allEpics.find(e => e.slug === task?.epic_slug);
+          const project = this.getProjectForEpic(epic);
+          const crumbs = [];
+          if (project) crumbs.push({ type: 'project', slug: project.slug, title: project.title });
+          if (epic) crumbs.push({ type: 'epic', slug: epic.slug, title: epic.title });
+          if (task) crumbs.push({ type: 'task', slug: task.slug, title: task.title });
+          return crumbs;
+        },
+
+        toggleProject(slug) {
+          this.expandedProjects[slug] = !this.expandedProjects[slug];
+        },
+
+        toggleEpic(slug) {
+          this.expandedEpics[slug] = !this.expandedEpics[slug];
+        },
+
+        selectProject(project) {
+          this.section = 'projects';
+          this.selectedProject = JSON.parse(JSON.stringify(project));
+          this.selectedEpic = null;
+          this.selectedTask = null;
+          this.expandedProjects[project.slug] = true;
+        },
+
+        async selectEpic(project, epic) {
+          this.section = 'projects';
+          this.selectedProject = JSON.parse(JSON.stringify(project));
+          this.selectedEpic = JSON.parse(JSON.stringify({ ...epic, project_slug: epic.project_slug || project.slug, _linkDesignDocSlug: '' }));
+          this.selectedTask = null;
+          this.expandedProjects[project.slug] = true;
+          this.expandedEpics[epic.slug] = true;
+          await this.loadEpicDesignDocs(epic.slug);
+        },
+
+        async selectProjectTask(project, epic, task) {
+          this.section = 'projects';
+          this.selectedProject = JSON.parse(JSON.stringify(project));
+          this.selectedEpic = JSON.parse(JSON.stringify({ ...epic, project_slug: epic.project_slug || project.slug }));
+          await this.loadTaskDetail(task.slug);
+        },
+
+        openProjectBySlug(slug) {
+          const project = this.projects.find(p => p.slug === slug);
+          if (project) this.selectProject(project);
+        },
+
+        openEpicBySlug(slug) {
+          const epic = this.allEpics.find(e => e.slug === slug);
+          const project = this.getProjectForEpic(epic);
+          if (epic && project) this.selectEpic(project, epic);
+        },
+
+        async openTaskFromSlug(slug, forceSection = 'queue') {
+          this.section = forceSection;
+          await this.loadTaskDetail(slug);
+        },
+
+        async saveProject() {
+          try {
+            await this.api('PATCH', `/api/projects/${this.selectedProject.slug}`, {
+              title: this.selectedProject.title,
+              goal: this.selectedProject.goal,
+              description: this.selectedProject.description,
+              status: this.selectedProject.status,
+              tags: Array.isArray(this.selectedProject.tags) ? this.selectedProject.tags : this.csvToArray(this.selectedProject.tags || ''),
+            });
+            this.showToast('Project updated.');
+            await this.refreshProjects();
+            this.openProjectBySlug(this.selectedProject.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async archiveProject() {
+          if (!confirm('Archive this project?')) return;
+          try {
+            await this.api('PATCH', `/api/projects/${this.selectedProject.slug}`, {
+              archived_at: new Date().toISOString(),
+            });
+            this.showToast('Project archived.');
+            await this.refreshProjects();
+            this.selectedProject = null;
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async saveEpic() {
+          try {
+            await this.api('PATCH', `/api/epics/${this.selectedEpic.slug}`, {
+              title: this.selectedEpic.title,
+              description: this.selectedEpic.description,
+              status: this.selectedEpic.status,
+              tags: Array.isArray(this.selectedEpic.tags) ? this.selectedEpic.tags : this.csvToArray(this.selectedEpic.tags || ''),
+              blocked_reason: this.selectedEpic.blocked_reason || null,
+            });
+            this.showToast('Epic updated.');
+            await this.refreshProjects();
+            this.openEpicBySlug(this.selectedEpic.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async archiveEpic() {
+          if (!confirm('Archive this epic?')) return;
+          try {
+            await this.api('PATCH', `/api/epics/${this.selectedEpic.slug}`, { status: 'abandoned' });
+            this.showToast('Epic archived.');
+            await this.refreshProjects();
+            this.selectedEpic = null;
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        epicDesignDocs(epic) {
+          return epic?.epicDesignDocsList || epic?.design_docs || [];
+        },
+
+        async loadEpicDesignDocs(epicSlug) {
+          try {
+            const docs = await this.api('GET', `/api/epics/${epicSlug}/design-docs`);
+            if (this.selectedEpic?.slug === epicSlug) {
+              this.selectedEpic = { ...this.selectedEpic, epicDesignDocsList: docs || [] };
+            }
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async linkDesignDoc() {
+          const selectedSlug = this.selectedEpic?._linkDesignDocSlug;
+          const doc = this.allDesignDocs.find(d => d.slug === selectedSlug);
+          if (!doc) {
+            this.showToast('Select a valid design doc slug.', 'error');
+            return;
+          }
+          try {
+            await this.api('POST', `/api/epics/${this.selectedEpic.slug}/design-docs`, { design_doc_id: doc.id });
+            this.showToast('Design doc linked.');
+            await this.loadEpicDesignDocs(this.selectedEpic.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async unlinkDesignDoc(doc) {
+          if (!confirm('Unlink this design doc from the epic?')) return;
+          try {
+            await this.api('DELETE', `/api/epics/${this.selectedEpic.slug}/design-docs/${doc.id}`);
+            this.showToast('Design doc unlinked.');
+            await this.loadEpicDesignDocs(this.selectedEpic.slug);
+          } catch (err) {
+            if (err?.status === 404) {
+              this.showToast('Design doc unlink is not yet supported.', 'error');
+              return;
+            }
+            this.handleError(err);
+          }
+        },
+
+        async saveTask() {
+          try {
+            const slug = this.selectedTask.slug;
+            await this.api('PATCH', `/api/tasks/${slug}`, {
+              title: this.selectedTask.title,
+              description: this.selectedTask.description || null,
+              status: this.selectedTask.status,
+              assignee: this.selectedTask.assignee || null,
+              estimated_effort: this.selectedTask.estimated_effort || null,
+              tags: Array.isArray(this.selectedTask.tags) ? this.selectedTask.tags : this.csvToArray(this.selectedTask.tags || ''),
+              blocked_reason: this.selectedTask.blocked_reason || null,
+              context_snapshot: this.selectedTask.context_snapshot || null,
+            });
+            this.showToast('Task updated.');
+            await Promise.all([this.refreshProjects(), this.loadQueue()]);
+            await this.loadTaskDetail(slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async changeTaskStatus(status) {
+          try {
+            const slug = this.selectedTask.slug;
+            await this.api('PATCH', `/api/tasks/${slug}`, { status });
+            this.showToast('Task status updated.');
+            await Promise.all([this.refreshProjects(), this.loadQueue()]);
+            await this.loadTaskDetail(slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async archiveTask() {
+          if (!confirm('Archive this task?')) return;
+          try {
+            await this.api('PATCH', `/api/tasks/${this.selectedTask.slug}`, { status: 'abandoned' });
+            const slug = this.selectedTask.slug;
+            this.showToast('Task archived.');
+            await Promise.all([this.refreshProjects(), this.loadQueue()]);
+            if (this.section === 'projects') this.selectedTask = null;
+            if (this.section === 'queue' && this.queueTasks.length && this.queueTasks[0].slug !== slug) {
+              await this.loadTaskDetail(this.queueTasks[0].slug);
+            }
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async addAcceptanceCriterion() {
+          if (!this.selectedTask._newCriterion.description) {
+            this.showToast('Criterion description is required.', 'error');
+            return;
+          }
+          try {
+            await this.api('POST', `/api/tasks/${this.selectedTask.slug}/acceptance-criteria`, {
+              description: this.selectedTask._newCriterion.description,
+            });
+            this.showToast('Acceptance criterion added.');
+            await this.loadTaskDetail(this.selectedTask.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async deleteAcceptanceCriterion(id) {
+          if (!confirm('Delete this acceptance criterion?')) return;
+          try {
+            await this.api('DELETE', `/api/tasks/${this.selectedTask.slug}/acceptance-criteria/${id}`);
+            this.showToast('Acceptance criterion removed.');
+            await this.loadTaskDetail(this.selectedTask.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async addTestingLayer() {
+          if (!this.selectedTask._newLayer.layer || !this.selectedTask._newLayer.description) {
+            this.showToast('Layer and description are required.', 'error');
+            return;
+          }
+          try {
+            await this.api('POST', `/api/tasks/${this.selectedTask.slug}/testing-layers`, {
+              layer: this.selectedTask._newLayer.layer,
+              description: this.selectedTask._newLayer.description,
+            });
+            this.showToast('Testing layer added.');
+            await this.loadTaskDetail(this.selectedTask.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async deleteTestingLayer(id) {
+          if (!confirm('Delete this testing layer?')) return;
+          try {
+            await this.api('DELETE', `/api/tasks/${this.selectedTask.slug}/testing-layers/${id}`);
+            this.showToast('Testing layer removed.');
+            await this.loadTaskDetail(this.selectedTask.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async saveDoD() {
+          try {
+            await this.api('PATCH', `/api/tasks/${this.selectedTask.slug}/dod`, {
+              dod_description: this.selectedTask._dodDraft.dod_description || this.selectedTask._dodDraft.description,
+              checklist: (this.selectedTask._dodDraft.checklist || []).length
+                ? this.selectedTask._dodDraft.checklist
+                : this.csvToArray(this.selectedTask._dodDraft.required_checks || '').map(item => ({ item, checked: false })),
+            });
+            this.showToast('Definition of Done updated.');
+            await this.loadTaskDetail(this.selectedTask.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        toggleAccordion(key) {
+          this.accordions[key] = !this.accordions[key];
+        },
+
+        async toggleBrief() {
+          this.briefOpen = !this.briefOpen;
+          if (!this.briefOpen || this.briefContent) return;
+          try {
+            this.briefContent = await this.apiText(`/api/briefs/task/${this.selectedTask.slug}/markdown`);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async loadNotes() {
+          this.loadingList = true;
+          try {
+            const params = new URLSearchParams();
+            if (this.noteTagFilter) params.set('tag', this.noteTagFilter);
+            if (this.noteFilter) params.set('search', this.noteFilter);
+            const query = params.toString() ? `?${params.toString()}` : '';
+            this.notes = await this.api('GET', `/api/notes${query}`);
+          } catch (err) {
+            this.handleError(err);
+          } finally {
+            this.loadingList = false;
+          }
+        },
+
+        async loadNoteDetail(slug) {
+          try {
+            this.selectedNote = await this.api('GET', `/api/notes/${slug}`);
+            this.noteInlineError = '';
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async saveNote() {
+          try {
+            const tags = Array.isArray(this.selectedNote.tags) ? this.selectedNote.tags : this.csvToArray(this.selectedNote.tags);
+            if (!this.validateNoteTags(tags)) {
+              this.noteInlineError = 'At least one tag must start with scope:.';
+              this.showToast(this.noteInlineError, 'error');
+              return;
+            }
+            await this.api('PATCH', `/api/notes/${this.selectedNote.slug}`, {
+              title: this.selectedNote.title,
+              body: this.selectedNote.body,
+              tags,
+            });
+            this.showToast('Note updated.');
+            await this.loadNotes();
+            await this.loadNoteDetail(this.selectedNote.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async toggleNoteArchive(archive) {
+          try {
+            await this.api('POST', `/api/notes/${this.selectedNote.slug}/${archive ? 'archive' : 'unarchive'}`);
+            this.showToast(`Note ${archive ? 'archived' : 'restored'}.`);
+            await this.loadNotes();
+            await this.loadNoteDetail(this.selectedNote.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async loadDesignDocs() {
+          this.loadingList = true;
+          try {
+            this.designDocs = await this.api('GET', '/api/design-docs');
+            this.allDesignDocs = (this.designDocs || []).map(d => ({ id: d.id, slug: d.slug, title: d.title }));
+          } catch (err) {
+            this.handleError(err);
+          } finally {
+            this.loadingList = false;
+          }
+        },
+
+        filteredDesignDocs() {
+          const q = (this.designDocFilter || '').toLowerCase().trim();
+          if (!q) return this.designDocs;
+          return (this.designDocs || []).filter(doc => `${doc.title} ${doc.slug}`.toLowerCase().includes(q));
+        },
+
+        async loadDesignDocDetail(slug) {
+          try {
+            this.selectedDesignDoc = await this.api('GET', `/api/design-docs/${slug}`);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async saveDesignDoc() {
+          try {
+            await this.api('PATCH', `/api/design-docs/${this.selectedDesignDoc.slug}`, {
+              title: this.selectedDesignDoc.title,
+              content: this.selectedDesignDoc.content,
+              tags: Array.isArray(this.selectedDesignDoc.tags) ? this.selectedDesignDoc.tags : this.csvToArray(this.selectedDesignDoc.tags || ''),
+            });
+            this.showToast('Design doc updated.');
+            await this.loadDesignDocs();
+            await this.loadDesignDocDetail(this.selectedDesignDoc.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async loadIssues() {
+          this.loadingList = true;
+          try {
+            const query = this.issueFilter ? `?task=${encodeURIComponent(this.issueFilter)}` : '';
+            this.issues = await this.api('GET', `/api/issues${query}`);
+          } catch (err) {
+            this.handleError(err);
+          } finally {
+            this.loadingList = false;
+          }
+        },
+
+        async loadIssueDetail(slug) {
+          try {
+            this.selectedIssue = await this.api('GET', `/api/issues/${slug}`);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async saveIssue() {
+          try {
+            const linkedRunbookIds = Array.isArray(this.selectedIssue.linked_runbook_ids)
+              ? this.selectedIssue.linked_runbook_ids
+              : [];
+            await this.api('PATCH', `/api/issues/${this.selectedIssue.slug}`, {
+              title: this.selectedIssue.title,
+              severity: this.selectedIssue.severity,
+              task_slug: this.selectedIssue.linked_task_slug || null,
+              linked_runbook_ids: linkedRunbookIds,
+              triage_steps: this.selectedIssue.triage_steps || null,
+              root_cause: this.selectedIssue.root_cause || null,
+              resolution: this.selectedIssue.resolution || null,
+              lessons_learned: this.selectedIssue.lessons_learned || null,
+            });
+            this.showToast('Issue updated.');
+            await this.loadIssues();
+            await this.loadIssueDetail(this.selectedIssue.slug);
+            if (this.selectedTask?.slug === this.selectedIssue.linked_task_slug) await this.loadTaskDetail(this.selectedTask.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async resolveIssue() {
+          try {
+            await this.api('POST', `/api/issues/${this.selectedIssue.slug}/resolve`);
+            this.showToast('Issue resolved.');
+            await this.loadIssues();
+            await this.loadIssueDetail(this.selectedIssue.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async openIssue(slug) {
+          this.section = 'issues';
+          await this.loadIssues();
+          await this.loadIssueDetail(slug);
+        },
+
+        async loadRunbooks() {
+          this.loadingList = true;
+          try {
+            const query = this.runbookProjectFilter ? `?project_slug=${encodeURIComponent(this.runbookProjectFilter)}` : '';
+            this.runbooks = await this.api('GET', `/api/runbooks${query}`);
+            this.allRunbooks = (this.runbooks || []).map(r => ({ id: r.id, slug: r.slug, title: r.title }));
+          } catch (err) {
+            this.handleError(err);
+          } finally {
+            this.loadingList = false;
+          }
+        },
+
+        filteredRunbooks() {
+          const q = (this.runbookFilter || '').toLowerCase().trim();
+          if (!q) return this.runbooks;
+          return (this.runbooks || []).filter(runbook => `${runbook.title} ${runbook.slug}`.toLowerCase().includes(q));
+        },
+
+        async loadRunbookDetail(slug) {
+          try {
+            this.selectedRunbook = await this.api('GET', `/api/runbooks/${slug}`);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async saveRunbook() {
+          try {
+            const linkedIssueIds = Array.isArray(this.selectedRunbook.linked_issue_ids)
+              ? this.selectedRunbook.linked_issue_ids
+              : [];
+            await this.api('PATCH', `/api/runbooks/${this.selectedRunbook.slug}`, {
+              title: this.selectedRunbook.title,
+              service: this.selectedRunbook.service,
+              category: this.selectedRunbook.category,
+              steps: this.selectedRunbook.steps,
+              status: this.selectedRunbook.status,
+              tags: Array.isArray(this.selectedRunbook.tags) ? this.selectedRunbook.tags : this.csvToArray(this.selectedRunbook.tags || ''),
+              symptoms: this.selectedRunbook.symptoms || null,
+              prerequisites: this.selectedRunbook.prerequisites || null,
+              verification: this.selectedRunbook.verification || null,
+              escalation: this.selectedRunbook.escalation || null,
+              linked_issue_ids: linkedIssueIds,
+              project_slug: this.selectedRunbook.project_slug || null,
+            });
+            this.showToast('Runbook updated.');
+            await this.loadRunbooks();
+            await this.loadRunbookDetail(this.selectedRunbook.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async validateRunbook() {
+          try {
+            await this.api('POST', `/api/runbooks/${this.selectedRunbook.slug}/validate`);
+            this.showToast('Runbook validated.');
+            await this.loadRunbooks();
+            await this.loadRunbookDetail(this.selectedRunbook.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async openRunbook(slug) {
+          this.section = 'runbooks';
+          await this.loadRunbooks();
+          await this.loadRunbookDetail(slug);
+        },
+
+        async loadToolDocs() {
+          this.loadingList = true;
+          try {
+            this.toolDocs = await this.api('GET', '/api/tool-docs');
+          } catch (err) {
+            this.handleError(err);
+          } finally {
+            this.loadingList = false;
+          }
+        },
+
+        async loadToolDocDetail(slug) {
+          try {
+            this.selectedToolDoc = await this.api('GET', `/api/tool-docs/${slug}`);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async reindexToolDoc() {
+          try {
+            await this.api('POST', `/api/tool-docs/${this.selectedToolDoc.slug}/reindex`);
+            this.showToast('Tool doc reindex started.');
+            await this.loadToolDocDetail(this.selectedToolDoc.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async saveToolDoc() {
+          try {
+            await this.api('PATCH', `/api/tool-docs/${this.selectedToolDoc.slug}`, {
+              title: this.selectedToolDoc.title,
+              repo_url: this.selectedToolDoc.repo_url,
+              tags: Array.isArray(this.selectedToolDoc.tags) ? this.selectedToolDoc.tags : (this.selectedToolDoc.tags || '').split(',').map(t => t.trim()).filter(Boolean),
+            });
+            this.showToast('Tool doc updated.');
+            await this.loadToolDocs();
+            await this.loadToolDocDetail(this.selectedToolDoc.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async loadContextDocs() {
+          this.loadingList = true;
+          try {
+            this.contextDocs = await this.api('GET', '/api/context-docs');
+            this.allContextDocs = (this.contextDocs || []).map(d => ({ id: d.id, slug: d.slug, title: d.title }));
+          } catch (err) {
+            this.handleError(err);
+          } finally {
+            this.loadingList = false;
+          }
+        },
+
+        filteredContextDocs() {
+          const q = (this.contextDocFilter || '').toLowerCase().trim();
+          if (!q) return this.contextDocs;
+          return (this.contextDocs || []).filter(doc => `${doc.title} ${doc.slug}`.toLowerCase().includes(q));
+        },
+
+        async loadContextDocDetail(slug) {
+          try {
+            const doc = await this.api('GET', `/api/context-docs/${slug}`);
+            this.selectedContextDoc = { ...doc, links: doc.links || [], _newLink: { entity_type: '', entity_slug: '' } };
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async saveContextDoc() {
+          try {
+            await this.api('PATCH', `/api/context-docs/${this.selectedContextDoc.slug}`, {
+              title: this.selectedContextDoc.title,
+              content: this.selectedContextDoc.content,
+              tags: Array.isArray(this.selectedContextDoc.tags) ? this.selectedContextDoc.tags : this.csvToArray(this.selectedContextDoc.tags || ''),
+            });
+            this.showToast('Context doc updated.');
+            await this.loadContextDocs();
+            await this.loadContextDocDetail(this.selectedContextDoc.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async addContextDocLink() {
+          const { entity_type, entity_slug } = this.selectedContextDoc._newLink;
+          if (!entity_type || !entity_slug) {
+            this.showToast('Entity type and slug are required.', 'error');
+            return;
+          }
+          try {
+            await this.api('POST', `/api/context-docs/${this.selectedContextDoc.slug}/links`, { entity_type, entity_slug });
+            this.showToast('Link added.');
+            await this.loadContextDocDetail(this.selectedContextDoc.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async removeContextDocLink(link) {
+          if (!confirm('Remove this link?')) return;
+          try {
+            await this.api('DELETE', `/api/context-docs/${this.selectedContextDoc.slug}/links/${link.entity_type}/${link.entity_slug}`);
+            this.showToast('Link removed.');
+            await this.loadContextDocDetail(this.selectedContextDoc.slug);
+          } catch (err) {
+            this.handleError(err);
+          }
+        },
+
+        async openContextDoc(slug) {
+          if (!slug) return;
+          this.section = 'contextDocs';
+          await this.loadContextDocs();
+          await this.loadContextDocDetail(slug);
+        },
+
+        async openDesignDoc(slug) {
+          if (!slug) return;
+          this.section = 'designDocs';
+          await this.loadDesignDocs();
+          await this.loadDesignDocDetail(slug);
+        },
+
       };
-      try {
-        this.projectDetail = await this.api(`/projects/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
-        await this.refreshProjects();
-        this.notify('Project saved');
-      } catch (error) { this.handleError(error); }
-    },
-
-    async selectEpic(slug) {
-      try {
-        const [epic, designDocs] = await Promise.all([
-          this.api(`/epics/${slug}`),
-          this.api(`/epics/${slug}/design-docs`),
-        ]);
-        this.epicDetail = { epic, designDocs };
-        this.epicEditForm = {
-          title: epic.title || '',
-          description: epic.description || '',
-          tagsText: (epic.tags || []).join(', '),
-          blocked_reason: epic.blocked_reason || '',
-        };
-      } catch (error) { this.handleError(error); }
-    },
-    async updateEpicStatus(status) {
-      try {
-        const epic = await this.api(`/epics/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify({ status }) });
-        this.epicDetail.epic = epic;
-        await this.refreshProjects();
-      } catch (error) { this.handleError(error); }
-    },
-    async saveEpicEdit() {
-      const payload = {
-        title: this.epicEditForm.title || undefined,
-        description: this.epicEditForm.description || undefined,
-        tags: this.tagsTextToArray(this.epicEditForm.tagsText),
-        blocked_reason: this.epicEditForm.blocked_reason || null,
-      };
-      try {
-        const epic = await this.api(`/epics/${this.selection.slug}`, { method: 'PATCH', body: JSON.stringify(payload) });
-        this.epicDetail.epic = epic;
-        await this.refreshProjects();
-        this.notify('Epic saved');
-      } catch (error) { this.handleError(error); }
-    },
-
-    async fetchQueue() {
-      try {
-        const params = new URLSearchParams();
-        if (this.queueStatusFilter) {
-          params.set('status', this.queueStatusFilter);
-        }
-        const all = this.queueStatusFilter
-          ? await this.api(`/tasks?${params}`)
-          : await Promise.all([
-              this.api('/tasks?status=in_progress'),
-              this.api('/tasks?status=ready'),
-              this.api('/tasks?status=draft'),
-            ]).then(([a, b, c]) => [...a, ...b, ...c]);
-        this.queueTasks = all;
-      } catch (error) { this.handleError(error); }
-    },
-
-    async fetchToolDocs() {
-      try { this.toolDocs = await this.api('/tool-docs'); } catch (error) { this.handleError(error); }
-    },
-    async saveToolDoc() {
-      if (!this.toolDocForm.title || !this.toolDocForm.repo_url) { this.error = 'Title and repository URL are required.'; return; }
-      const payload = { title: this.toolDocForm.title, repo_url: this.toolDocForm.repo_url, tags: this.tagsTextToArray(this.toolDocForm.tagsText) };
-      try {
-        await this.api('/tool-docs', { method: 'POST', body: JSON.stringify(payload) });
-        this.toolDocForm = { title: '', repo_url: '', tagsText: '' };
-        await this.fetchToolDocs();
-        this.notify('Tool doc source added and indexed');
-      } catch (error) { this.handleError(error); }
-    },
-    async reindexToolDoc(slug) {
-      try {
-        await this.api(`/tool-docs/${slug}/reindex`, { method: 'POST' });
-        await this.fetchToolDocs();
-        this.notify('Reindex complete');
-      } catch (error) { this.handleError(error); }
-    },
-  };
-}
-</script>
+    }
+  </script>
 </body>
 </html>

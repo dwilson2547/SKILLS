@@ -3,17 +3,18 @@ name: work-manager
 description: >
   Use this skill when pulling a task to work on, checking task criteria and definition of done,
   saving discoveries as notes, filing issue documents, or updating task progress. Work Manager
-  (http://localhost:8010) is the central project planning system — epics, tasks, subtasks,
-  acceptance criteria, testing layers, DoD, notes, and issue docs all live here.
+  (http://localhost:8010) is the central project planning system — projects, epics, tasks,
+  acceptance criteria, testing layers, DoD, notes, issues, design docs, runbooks, and context docs
+  all live here. Notes is also here — use workman note, not the old notes CLI.
 applyTo: "**"
 ---
 
 # Work Manager
 
 Work Manager is the central project planning and agent execution system. All projects, epics,
-tasks, notes, issues, and design docs live here. Agents pull work from it, execute tasks, save
-their findings back to it, and cannot mark tasks complete unless all acceptance criteria and
-testing layers are satisfied.
+tasks, notes, issues, design docs, runbooks, and context docs live here. Agents pull work from
+it, execute tasks, save their findings back to it, and cannot mark tasks complete unless all
+acceptance criteria and testing layers are satisfied.
 
 > If `workman` is not installed, follow [INSTALL.md](./INSTALL.md). If the CLI is unusable, see
 > [FALLBACK.md](./FALLBACK.md) for curl commands.
@@ -81,7 +82,7 @@ workman testing update TASK-001 <id> --status passed
 ### 5 — Save discoveries as notes
 
 ```bash
-workman note add "Title" "Body text" --tags scope:domain,technology
+workman note add --title "Title" --body "Body text" --tags scope:domain,technology
 ```
 
 Notes require at least one `scope:` tag. Future briefs in the same domain will surface them.
@@ -110,6 +111,55 @@ unresolved failures. Fix blockers first — `workman brief TASK-001` shows what'
 - Additional context tags are fine: `scope:api,fastapi,pagination`
 - Keep body under 2000 characters — concise findings only
 - Notes are surfaced in task briefs when their scope tags overlap with the task's tags
+
+---
+
+## Context Docs
+
+Context docs are attachable reference documents — markdown files that can be linked to any
+project, epic, or task. Use them for research findings, POC notes, supporting reference material,
+or anything too long to be a note but not formal enough to be a design doc.
+
+Context docs do not have a `workman` CLI command yet — use the API directly:
+
+```bash
+BASE="http://localhost:8010"
+
+# List all context docs
+curl -s "$BASE/context-docs" | python3 -m json.tool
+
+# List context docs linked to a specific entity
+curl -s "$BASE/context-docs?entity_type=task&entity_slug=TASK-001" | python3 -m json.tool
+
+# Create a context doc
+curl -s -X POST "$BASE/context-docs" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"My Doc","content":"# Heading\n\nBody text.","tags_text":"scope:api,research"}' \
+  | python3 -m json.tool
+
+# Get a context doc (includes TOC and linked entities)
+curl -s "$BASE/context-docs/CTX-001" | python3 -m json.tool
+
+# Get table of contents only (for large docs — fetch chunks you need)
+curl -s "$BASE/context-docs/CTX-001/toc" | python3 -m json.tool
+
+# Get specific chunk by heading
+curl -s "$BASE/context-docs/CTX-001/chunks?heading=Installation" | python3 -m json.tool
+
+# Link a context doc to a task/epic/project
+curl -s -X POST "$BASE/context-docs/CTX-001/links" \
+  -H "Content-Type: application/json" \
+  -d '{"entity_type":"task","entity_slug":"TASK-001"}' \
+  | python3 -m json.tool
+
+# Unlink
+curl -s -X DELETE "$BASE/context-docs/CTX-001/links/task/TASK-001"
+```
+
+**Agent workflow with context docs:**
+1. When starting a task, check its brief — linked context docs appear in the brief with slug and title.
+2. Use the TOC endpoint to see what a large doc contains before pulling everything.
+3. Use the chunks endpoint to pull only the section relevant to your work.
 
 ---
 
@@ -147,9 +197,9 @@ workman dod get TASK-001
 workman dod set TASK-001 "All criteria verified, tests passing, PR merged"
 
 # Notes
-workman note ls
-workman note ls --query "rate limiting" --mode semantic
-workman note add "Title" "Body" --tags scope:api,ratelimit
+workman note list
+workman note list --query "rate limiting"
+workman note add --title "Title" --body "Body" --tags scope:api,ratelimit
 workman note get NOTE-001
 
 # Issues

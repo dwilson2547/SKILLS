@@ -217,6 +217,31 @@ class Issue(Base):
     task = relationship("Task", back_populates="issues")
 
 
+class ContextDoc(Base):
+    __tablename__ = "context_docs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    slug = Column(String, unique=True, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    tags = Column(JSON, default=list)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
+
+    links = relationship("ContextDocLink", back_populates="context_doc", cascade="all, delete-orphan")
+
+
+class ContextDocLink(Base):
+    __tablename__ = "context_doc_links"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    context_doc_id = Column(Integer, ForeignKey("context_docs.id"), nullable=False)
+    entity_type = Column(String, nullable=False)
+    entity_slug = Column(String, nullable=False)
+
+    context_doc = relationship("ContextDoc", back_populates="links")
+
+
 class Runbook(Base):
     __tablename__ = "runbooks"
 
@@ -228,6 +253,7 @@ class Runbook(Base):
     version = Column(Integer, default=1, nullable=False)
     status = Column(String, nullable=False, default="draft")
     tags = Column(JSON, default=list)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     symptoms = Column(Text)
     prerequisites = Column(Text)
     steps = Column(Text)
@@ -237,3 +263,5 @@ class Runbook(Base):
     last_validated_at = Column(DateTime)
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, nullable=False)
+
+    project = relationship("Project")

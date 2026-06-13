@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..helpers import NotFoundError, generate_slug, get_by_slug
 from ..models import ToolDoc
-from ..schemas import ToolDocCreate
+from ..schemas import ToolDocCreate, ToolDocUpdate
 from ..serializers import tool_doc_dict
 from ..services.tool_docs import reindex_tool_doc
 
@@ -14,6 +14,27 @@ router = APIRouter(tags=["tool_docs"])
 @router.get("/tool-docs")
 def list_tool_docs(db: Session = Depends(get_db)):
     return [tool_doc_dict(doc) for doc in db.query(ToolDoc).order_by(ToolDoc.created_at.desc()).all()]
+
+
+@router.get("/tool-docs/{slug}")
+def get_tool_doc(slug: str, db: Session = Depends(get_db)):
+    try:
+        return tool_doc_dict(get_by_slug(db, "tool_doc", slug))
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.patch("/tool-docs/{slug}")
+def update_tool_doc(slug: str, payload: ToolDocUpdate, db: Session = Depends(get_db)):
+    try:
+        doc = get_by_slug(db, "tool_doc", slug)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(doc, key, value)
+    db.commit()
+    db.refresh(doc)
+    return tool_doc_dict(doc)
 
 
 @router.post("/tool-docs")

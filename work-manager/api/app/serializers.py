@@ -1,4 +1,4 @@
-from .models import AcceptanceCriterion, DesignDoc, DocChunk, DodItem, Epic, Issue, Note, Project, Runbook, Subtask, Task, TestingLayer, ToolDoc
+from .models import AcceptanceCriterion, ContextDoc, ContextDocLink, DesignDoc, DocChunk, DodItem, Epic, Issue, Note, Project, Runbook, Subtask, Task, TestingLayer, ToolDoc
 
 
 def project_dict(project: Project):
@@ -193,6 +193,8 @@ def runbook_dict(runbook: Runbook):
         "version": runbook.version,
         "status": runbook.status,
         "tags": runbook.tags or [],
+        "project_id": runbook.project_id,
+        "project_slug": runbook.project.slug if runbook.project else None,
         "symptoms": runbook.symptoms,
         "prerequisites": runbook.prerequisites,
         "steps": runbook.steps,
@@ -202,4 +204,26 @@ def runbook_dict(runbook: Runbook):
         "last_validated_at": runbook.last_validated_at,
         "created_at": runbook.created_at,
         "updated_at": runbook.updated_at,
+    }
+
+
+def context_doc_dict(doc: ContextDoc):
+    return {
+        "id": doc.id,
+        "slug": doc.slug,
+        "title": doc.title,
+        "content": doc.content,
+        "tags": doc.tags or [],
+        "created_at": doc.created_at,
+        "updated_at": doc.updated_at,
+        "links": [context_doc_link_dict(link) for link in (doc.links or [])],
+    }
+
+
+def context_doc_link_dict(link: ContextDocLink):
+    return {
+        "id": link.id,
+        "context_doc_id": link.context_doc_id,
+        "entity_type": link.entity_type,
+        "entity_slug": link.entity_slug,
     }

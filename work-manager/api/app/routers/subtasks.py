@@ -74,6 +74,20 @@ def update_acceptance(slug: str, item_id: int, payload: AcceptanceCriterionUpdat
     return acceptance_dict(item)
 
 
+@router.delete("/subtasks/{slug}/acceptance-criteria/{item_id}")
+def delete_acceptance(slug: str, item_id: int, db: Session = Depends(get_db)):
+    try:
+        subtask = get_by_slug(db, "subtask", slug)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    item = db.query(AcceptanceCriterion).filter_by(id=item_id, entity_type="subtask", entity_id=subtask.id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Acceptance criterion not found")
+    db.delete(item)
+    db.commit()
+    return {"ok": True}
+
+
 @router.post("/subtasks/{slug}/testing-layers")
 def create_testing_layer(slug: str, payload: TestingLayerCreate, db: Session = Depends(get_db)):
     try:
@@ -101,6 +115,20 @@ def update_testing_layer(slug: str, item_id: int, payload: TestingLayerUpdate, d
     db.commit()
     db.refresh(layer)
     return testing_layer_dict(layer)
+
+
+@router.delete("/subtasks/{slug}/testing-layers/{item_id}")
+def delete_testing_layer_endpoint(slug: str, item_id: int, db: Session = Depends(get_db)):
+    try:
+        subtask = get_by_slug(db, "subtask", slug)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    layer = db.query(TestingLayer).filter_by(id=item_id, entity_type="subtask", entity_id=subtask.id).first()
+    if layer is None:
+        raise HTTPException(status_code=404, detail="Testing layer not found")
+    db.delete(layer)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/subtasks/{slug}/dod")

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -35,7 +36,7 @@ class ProjectUpdate(Model):
     status: WorkStatus | None = None
     tags: list[str] | None = None
     blocked_reason: str | None = None
-    archived_at: str | None = None
+    archived_at: datetime | None = None
 
     @field_validator("tags")
     @classmethod
@@ -201,6 +202,7 @@ class DesignDocCreate(Model):
     title: str
     content: str
     tags: list[str] = Field(default_factory=list)
+    epic_slug: str | None = None
 
     _normalize_tags = field_validator("tags")(ensure_tags)
 
@@ -226,6 +228,17 @@ class ToolDocCreate(Model):
     tags: list[str] = Field(default_factory=list)
 
     _normalize_tags = field_validator("tags")(ensure_tags)
+
+
+class ToolDocUpdate(Model):
+    title: str | None = None
+    repo_url: str | None = None
+    tags: list[str] | None = None
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, value):
+        return ensure_tags(value)
 
 
 class IssueCreate(Model):
@@ -268,6 +281,7 @@ class RunbookCreate(Model):
     version: int = 1
     status: RunbookStatus = "draft"
     tags: list[str] = Field(default_factory=list)
+    project_slug: str | None = None
     symptoms: str | None = None
     prerequisites: str | None = None
     steps: str | None = None
@@ -285,6 +299,7 @@ class RunbookUpdate(Model):
     version: int | None = None
     status: RunbookStatus | None = None
     tags: list[str] | None = None
+    project_slug: str | None = None
     symptoms: str | None = None
     prerequisites: str | None = None
     steps: str | None = None
@@ -296,3 +311,29 @@ class RunbookUpdate(Model):
     @classmethod
     def validate_tags(cls, value):
         return ensure_tags(value)
+
+
+class ContextDocCreate(Model):
+    title: str
+    content: str
+    tags: list[str] = Field(default_factory=list)
+    entity_type: str | None = None
+    entity_slug: str | None = None
+
+    _normalize_tags = field_validator("tags")(ensure_tags)
+
+
+class ContextDocUpdate(Model):
+    title: str | None = None
+    content: str | None = None
+    tags: list[str] | None = None
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, value):
+        return ensure_tags(value)
+
+
+class ContextDocLinkCreate(Model):
+    entity_type: str
+    entity_slug: str

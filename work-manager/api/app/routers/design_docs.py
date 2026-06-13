@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..helpers import NotFoundError, generate_slug, get_by_slug, refresh_design_doc_chunks, set_updated
-from ..models import DocChunk, DesignDoc
+from ..models import DocChunk, DesignDoc, Epic
 from ..schemas import DesignDocCreate, DesignDocUpdate
 from ..serializers import design_doc_dict, doc_chunk_dict
 
@@ -17,10 +17,16 @@ def list_design_docs(db: Session = Depends(get_db)):
 
 @router.post("/design-docs")
 def create_design_doc(payload: DesignDocCreate, db: Session = Depends(get_db)):
-    doc = DesignDoc(slug=generate_slug(db, "design_doc"), **payload.model_dump())
+    data = payload.model_dump(exclude={"epic_slug"})
+    doc = DesignDoc(slug=generate_slug(db, "design_doc"), **data)
     db.add(doc)
     db.flush()
     refresh_design_doc_chunks(db, doc)
+    if payload.epic_slug:
+        epic = db.query(Epic).filter(Epic.slug == payload.epic_slug).first()
+        if epic is None:
+            raise HTTPException(status_code=404, detail=f"Epic {payload.epic_slug} not found")
+        epic.design_docs.append(doc)
     db.commit()
     db.refresh(doc)
     return design_doc_dict(doc)

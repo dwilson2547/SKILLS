@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..embeddings import cosine_similarity, get_embedding
 from ..helpers import TERMINAL_STATES, dependency_target
-from ..models import AcceptanceCriterion, DocChunk, DodItem, Epic, Issue, ItemDependency, Note, Runbook, Subtask, Task, TestingLayer
+from ..models import AcceptanceCriterion, ContextDoc, ContextDocLink, DocChunk, DodItem, Epic, Issue, ItemDependency, Note, Runbook, Subtask, Task, TestingLayer
 from ..otel import brief_requests, notes_surfaced
 from .completion import enforce_completion
 
@@ -91,6 +91,21 @@ def assemble_task_brief(slug: str, db: Session) -> dict:
                 active_runbooks.append({"slug": runbook.slug, "title": runbook.title, "service": runbook.service, "category": runbook.category})
 
     completion_blockers = enforce_completion("task", task.id, db)
+
+    context_docs = []
+    for link in db.query(ContextDocLink).filter_by(entity_type="task", entity_slug=task.slug).all():
+        doc = db.query(ContextDoc).filter(ContextDoc.id == link.context_doc_id).first()
+        if doc:
+            chunks = db.query(DocChunk).filter(
+                DocChunk.doc_type == "context_doc", DocChunk.doc_id == doc.id
+            ).order_by(DocChunk.id.asc()).all()
+            context_docs.append({
+                "slug": doc.slug,
+                "title": doc.title,
+                "tags": doc.tags or [],
+                "toc": [{"index": i, "heading": chunk.section_heading} for i, chunk in enumerate(chunks)],
+            })
+
     brief_requests.add(1)
     return {
         "task": {
@@ -133,6 +148,7 @@ def assemble_task_brief(slug: str, db: Session) -> dict:
         "relevant_notes": relevant_notes,
         "linked_issues": linked_issues,
         "active_runbooks": active_runbooks,
+        "context_docs": context_docs,
         "completion_blockers": completion_blockers,
     }
 
@@ -178,11 +194,11 @@ def brief_to_markdown(brief: dict) -> str:
         "## Sibling Tasks",
         bullet_list(brief.get('sibling_tasks', []), lambda item: f"{item['slug']} — {item['title']} ({item['status']})"),
         "",
-        "## Subtasks",
-        bullet_list(brief.get('subtasks', []), lambda item: f"{item['slug']} — {item['title']} ({item['status']})"),
-        "",
         "## Design Doc Context",
         bullet_list(brief.get('design_doc_context', []), lambda item: f"{item['doc_title']} / {item['section_heading']}: {item['content'][:220]}"),
+        "",
+        "## Context Docs",
+        bullet_list(brief.get('context_docs', []), lambda item: f"{item['slug']} — {item['title']} | TOC: {', '.join(t['heading'] for t in item['toc']) or 'No sections'}"),
         "",
         "## Relevant Notes",
         bullet_list(brief.get('relevant_notes', []), lambda item: f"{item['slug']} — {item['title']}: {item['body'][:220]}"),

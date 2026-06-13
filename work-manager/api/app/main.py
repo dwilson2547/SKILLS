@@ -3,17 +3,28 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from sqlalchemy import text
 
 from .database import Base, SessionLocal, engine
 from .embeddings import load_model
 from .otel import setup_otel
-from .routers import briefs, design_docs, epics, issues, notes, projects, runbooks, subtasks, tasks, tool_docs
+from .routers import briefs, context_docs, design_docs, epics, issues, notes, projects, runbooks, subtasks, tasks, tool_docs
 from .services.scheduler import scheduler, start_scheduler
+
+
+def _run_migrations():
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE runbooks ADD COLUMN project_id INTEGER REFERENCES projects(id)"))
+            conn.commit()
+        except Exception:
+            pass
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _run_migrations()
     load_model()
     setup_otel(app)
     start_scheduler(SessionLocal)
@@ -37,6 +48,7 @@ app.include_router(tasks.router)
 app.include_router(subtasks.router)
 app.include_router(notes.router)
 app.include_router(design_docs.router)
+app.include_router(context_docs.router)
 app.include_router(tool_docs.router)
 app.include_router(issues.router)
 app.include_router(runbooks.router)

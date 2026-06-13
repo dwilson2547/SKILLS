@@ -97,3 +97,19 @@ def link_design_doc(slug: str, payload: LinkDesignDoc, db: Session = Depends(get
         set_updated(epic)
         db.commit()
     return [design_doc_dict(doc) for doc in epic.design_docs]
+
+
+@router.delete("/epics/{slug}/design-docs/{doc_id}")
+def unlink_design_doc(slug: str, doc_id: int, db: Session = Depends(get_db)):
+    try:
+        epic = get_by_slug(db, "epic", slug)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    design_doc = db.query(DesignDoc).filter(DesignDoc.id == doc_id).first()
+    if design_doc is None:
+        raise HTTPException(status_code=404, detail=f"Design doc {doc_id} not found")
+    if design_doc in epic.design_docs:
+        epic.design_docs.remove(design_doc)
+        set_updated(epic)
+        db.commit()
+    return [design_doc_dict(doc) for doc in epic.design_docs]

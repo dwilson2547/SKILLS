@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from .embeddings import batch_embeddings, get_embedding
 from .models import (
     AcceptanceCriterion,
+    ContextDoc,
+    ContextDocLink,
     DesignDoc,
     DocChunk,
     DodItem,
@@ -34,6 +36,7 @@ ENTITY_MODELS = {
     "subtask": Subtask,
     "note": Note,
     "design_doc": DesignDoc,
+    "context_doc": ContextDoc,
     "tool_doc": ToolDoc,
     "issue": Issue,
     "runbook": Runbook,
@@ -45,6 +48,7 @@ SLUG_PREFIXES = {
     "subtask": "SUB",
     "note": "NOTE",
     "design_doc": "DOC",
+    "context_doc": "CTX",
     "tool_doc": "TOOL",
     "issue": "ISSUE",
     "runbook": "RB",
@@ -141,6 +145,10 @@ def refresh_doc_chunks(db: Session, doc_type: str, doc_id: int, sections: list[t
 
 def refresh_design_doc_chunks(db: Session, design_doc: DesignDoc):
     refresh_doc_chunks(db, "design_doc", design_doc.id, chunk_markdown(design_doc.content))
+
+
+def refresh_context_doc_chunks(db: Session, context_doc: ContextDoc):
+    refresh_doc_chunks(db, "context_doc", context_doc.id, chunk_markdown(context_doc.content))
 
 
 def note_embedding_payload(title: str, body: str, tags: list[str]) -> str:
