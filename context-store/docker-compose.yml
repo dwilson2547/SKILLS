@@ -1,0 +1,18 @@
+services:
+  api:
+    build: ./api
+    image: dwilson2547/ai-playbooks-api:latest
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  ui:
+    build: ./ui
+    image: dwilson2547/ai-playbooks-ui:latest
+    ports:
+      - "3001:80"
+    depends_on:
+      - api
+    restart: unless-stopped

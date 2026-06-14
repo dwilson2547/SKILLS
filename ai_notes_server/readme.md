@@ -1,0 +1,11 @@
+meant to be a lightweight api where agents can query, persist, update, and archive notes. I'd like to have an accompanying skill as well that instructs the agent to use the notes server heavily while persisting minimal prose tidbits that could be useful for future sessions. see /home/daniel/documents/workspace/web_scrapers/junkyard_inventory_scrapers/notes for examples, i've been writing web scrapers and provided the agent with this instruction: 
+
+> check notes to see if the site pattern has been seen before, similarly if you see any re-useable patterns other sites might employ, please document them at notes so future scrapers can save time from your findings. notes is intended to be minimal prose, non-strategy or pattern perscriptive, just the main learnings from the session that could save time in the future.
+
+the instruction has worked to great effect, i'm hoping we can generalize it somewhat and build an api that allows the agents to persist enough information to be useful, but not so much that context gets bloated. i'd also like the api to have a basic semantic search using sentence transformers, fastapi is fine with no auth, i plan to run this as a docker compose locally
+
+for the note persistence i'm thinking itd be best to have title, tags, and content. i'm not sure if it makes sense to assign hard categories to notes, I think the tags should provide enough granularity when searching, i want to keep it as light weight as possible. i'd also like the api to include an instructions page, i've tried to make a few of these before and the bots always end up trying to query the api spec from the endpoint so it's probably best to include it. 
+
+I'd like to have a management ui as well that gives me basic crud functionality with the notes, nothing special is needed here, just something where i can add/edit/delete notes manually and i'd really like to have export/import as well
+
+the end goal here is to preserve knowledge across sessions and provide a living space for agents to keep notes

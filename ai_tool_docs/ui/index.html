@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Tool Docs</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f3f4f6;
+    --surface: #ffffff;
+    --sidebar-bg: #f8f9fa;
+    --border: #e5e7eb;
+    --text: #111827;
+    --text-muted: #6b7280;
+    --accent: #0891b2;
+    --accent-hover: #0e7490;
+    --accent-light: #e0f2fe;
+    --danger: #dc2626;
+    --tag-bg: #e0f2fe;
+    --tag-text: #0369a1;
+    --card-hover: #f0f9ff;
+    --card-selected: #e0f2fe;
+    --status-idle: #d1fae5;
+    --status-idle-text: #065f46;
+    --status-syncing: #fef3c7;
+    --status-syncing-text: #92400e;
+    --status-error: #fee2e2;
+    --status-error-text: #991b1b;
+  }
+
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
+         color: var(--text); height: 100vh; display: flex; flex-direction: column;
+         overflow: hidden; }
+
+  nav { display: flex; align-items: center; justify-content: space-between;
+        padding: .6rem 1.2rem; background: var(--surface); border-bottom: 1px solid var(--border);
+        flex-shrink: 0; gap: .75rem; }
+  nav .brand { font-weight: 700; font-size: 1.05rem; color: var(--accent); white-space: nowrap; }
+  nav .nav-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+  nav .count { font-size: .8rem; color: var(--text-muted); }
+
+  .layout { display: flex; flex: 1; overflow: hidden; }
+
+  .sidebar { width: 320px; flex-shrink: 0; display: flex; flex-direction: column;
+             background: var(--sidebar-bg); border-right: 1px solid var(--border);
+             overflow: hidden; }
+  .sidebar-top { padding: .75rem; display: flex; flex-direction: column; gap: .5rem;
+                 border-bottom: 1px solid var(--border); flex-shrink: 0; }
+
+  input[type=text], input[type=search], select, textarea {
+    width: 100%; padding: .45rem .6rem; border: 1px solid var(--border);
+    border-radius: 5px; font-size: .85rem; background: var(--surface);
+    color: var(--text); outline: none; font-family: inherit; }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 2px #0891b222; }
+  select { cursor: pointer; }
+  textarea { resize: vertical; min-height: 60px; }
+  label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-muted);
+          margin-bottom: .3rem; text-transform: uppercase; letter-spacing: .03em; }
+  .field { margin-bottom: .75rem; }
+  .field-hint { font-size: .75rem; color: var(--text-muted); margin-top: .2rem; }
+
+  .doc-list { flex: 1; overflow-y: auto; padding: .4rem; }
+  .doc-item { padding: .55rem .65rem; border-radius: 5px; cursor: pointer;
+              margin-bottom: 2px; transition: background .1s; }
+  .doc-item:hover { background: var(--card-hover); }
+  .doc-item.selected { background: var(--card-selected); }
+  .doc-item .doc-title { font-size: .85rem; font-weight: 600; margin-bottom: .15rem; }
+  .doc-item .doc-slug { font-size: .75rem; color: var(--text-muted); font-family: monospace;
+                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .doc-item .doc-meta { display: flex; gap: .4rem; align-items: center; margin-top: .2rem; flex-wrap: wrap; }
+
+  .tag { display: inline-block; padding: 1px 6px; background: var(--tag-bg);
+         color: var(--tag-text); border-radius: 3px; font-size: .72rem; font-weight: 500; }
+
+  .status-badge { display: inline-block; padding: 1px 7px; border-radius: 999px;
+                  font-size: .72rem; font-weight: 600; }
+  .status-idle    { background: var(--status-idle);    color: var(--status-idle-text); }
+  .status-syncing { background: var(--status-syncing); color: var(--status-syncing-text); }
+  .status-error   { background: var(--status-error);   color: var(--status-error-text); }
+
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .toolbar { display: flex; align-items: center; gap: .6rem; padding: .6rem 1rem;
+             border-bottom: 1px solid var(--border); background: var(--surface);
+             flex-shrink: 0; flex-wrap: wrap; }
+  .toolbar .tb-title { font-weight: 600; font-size: .95rem; flex: 1; min-width: 0;
+                       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toolbar .tb-slug { font-size: .78rem; color: var(--text-muted); font-family: monospace; }
+
+  .content-area { flex: 1; overflow-y: auto; padding: 1.5rem; }
+
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center;
+                 height: 100%; color: var(--text-muted); gap: .5rem; }
+  .empty-state .icon { font-size: 2.5rem; }
+
+  .toc { margin-bottom: 1.5rem; background: var(--surface); border: 1px solid var(--border);
+         border-radius: 8px; padding: 1rem; }
+  .toc h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em;
+             color: var(--text-muted); margin-bottom: .6rem; }
+  .toc-entry { display: flex; align-items: center; gap: .4rem; padding: .25rem 0;
+               border-bottom: 1px solid var(--border); cursor: pointer; }
+  .toc-entry:last-child { border-bottom: none; }
+  .toc-entry:hover .toc-heading { color: var(--accent); text-decoration: underline; }
+  .toc-heading { font-size: .85rem; }
+  .toc-level { font-size: .72rem; color: var(--text-muted); background: var(--bg);
+               padding: 1px 5px; border-radius: 3px; font-family: monospace; }
+
+  .doc-content { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+                 padding: 1.5rem; }
+  .section-block { margin-bottom: 1.5rem; padding-bottom: 1.5rem;
+                   border-bottom: 1px solid var(--border); }
+  .section-block:last-child { border-bottom: none; margin-bottom: 0; }
+  .section-heading { font-weight: 600; margin-bottom: .5rem; color: var(--text); }
+  .h1 { font-size: 1.4rem; }
+  .h2 { font-size: 1.15rem; }
+  .h3 { font-size: 1rem; }
+  .h4, .h5, .h6 { font-size: .9rem; }
+  .section-content { font-size: .875rem; line-height: 1.65; white-space: pre-wrap;
+                     word-break: break-word; }
+
+  .search-results { display: flex; flex-direction: column; gap: .75rem; }
+  .result-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+                 padding: 1rem; cursor: pointer; transition: border-color .1s; }
+  .result-card:hover { border-color: var(--accent); }
+  .result-doc { font-size: .75rem; color: var(--text-muted); margin-bottom: .2rem; }
+  .result-heading { font-weight: 600; font-size: .9rem; margin-bottom: .35rem; }
+  .result-preview { font-size: .82rem; color: var(--text-muted); white-space: pre-wrap;
+                    word-break: break-word; overflow: hidden;
+                    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+  .result-score { font-size: .72rem; color: var(--accent); font-family: monospace; margin-top: .3rem; }
+
+  .source-detail { background: var(--surface); border: 1px solid var(--border);
+                   border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+  .source-detail h3 { font-size: 1rem; font-weight: 700; margin-bottom: 1rem;
+                      padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+  .detail-meta { display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem;
+                 font-size: .82rem; color: var(--text-muted); }
+  .detail-meta span b { color: var(--text); }
+  .form-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .75rem; }
+  .error-msg { background: var(--status-error); color: var(--status-error-text);
+               padding: .5rem .75rem; border-radius: 5px; font-size: .82rem; margin-top: .5rem; }
+
+  .file-item { padding: .3rem .5rem; border-radius: 4px; font-size: .8rem;
+               font-family: monospace; color: var(--text-muted); }
+
+  button { padding: .35rem .75rem; border: 1px solid var(--border); border-radius: 5px;
+           font-size: .82rem; cursor: pointer; background: var(--surface); color: var(--text);
+           transition: background .1s; }
+  button:hover { background: var(--bg); }
+  button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button.active { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+  button.danger { background: var(--status-error); color: var(--danger); border-color: #fca5a5; }
+  button.danger:hover { background: #fecaca; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .loading { color: var(--text-muted); font-size: .85rem; padding: 1rem; text-align: center; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { display: inline-block; animation: spin 1s linear infinite; }
+</style>
+</head>
+<body x-data="app()" x-init="init()">
+
+<!-- Nav -->
+<nav>
+  <span class="brand">AI Tool Docs</span>
+  <div class="nav-actions">
+    <input type="text" placeholder="Search docs…" style="width:200px"
+           x-model="searchQuery"
+           @keydown.enter="runSearch()"
+           @input="if (!searchQuery) clearSearch()">
+    <button class="primary" @click="runSearch()">Search</button>
+    <button @click="clearSearch(); loadFiles()" title="Refresh">↺</button>
+    <span class="count" x-text="statsText"></span>
+    <button :class="{active: sourcesMode}" @click="toggleSourcesMode()">⚙ Sources</button>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <!-- ══════════════ SIDEBAR ══════════════ -->
+  <div class="sidebar">
+    <div class="sidebar-top">
+      <!-- Docs mode: source filter -->
+      <template x-if="!sourcesMode">
+        <select x-model="sourceFilter" @change="loadFiles()">
+          <option value="">All sources</option>
+          <template x-for="s in sources" :key="s.id">
+            <option :value="s.id" x-text="s.name"></option>
+          </template>
+        </select>
+      </template>
+      <!-- Sources mode: add button -->
+      <template x-if="sourcesMode">
+        <button class="primary" style="width:100%;" @click="openAddForm()">+ Add Source</button>
+      </template>
+    </div>
+
+    <div class="doc-list">
+      <!-- Docs mode: file list -->
+      <template x-if="!sourcesMode">
+        <div>
+          <template x-if="loading && !allFiles.length">
+            <div class="loading">Loading…</div>
+          </template>
+          <template x-if="!loading && !allFiles.length">
+            <div class="loading">No files indexed. Click ⚙ Sources to add a repo.</div>
+          </template>
+          <template x-for="f in allFiles" :key="f.key">
+            <div class="doc-item" :class="{selected: selectedFile && selectedFile.key === f.key}"
+                 @click="selectFile(f)">
+              <div class="doc-title" x-text="f.basename"></div>
+              <div class="doc-slug" x-text="f.filePath"></div>
+              <div class="doc-meta">
+                <span class="tag" x-text="f.sourceName"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- Sources mode: source list -->
+      <template x-if="sourcesMode">
+        <div>
+          <template x-if="!sources.length">
+            <div class="loading">No sources yet.</div>
+          </template>
+          <template x-for="s in sources" :key="s.id">
+            <div class="doc-item" :class="{selected: selectedSource && selectedSource.id === s.id}"
+                 @click="selectSource(s)">
+              <div class="doc-title" x-text="s.name"></div>
+              <div class="doc-slug" x-text="s.repo"></div>
+              <div class="doc-meta">
+                <span class="status-badge" :class="'status-'+s.status" x-text="s.status"></span>
+                <span class="tag" x-text="s.section_count + ' sections'"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- ══════════════ MAIN PANEL ══════════════ -->
+  <div class="main">
+
+    <!-- Toolbar -->
+    <div class="toolbar"
+         x-show="selectedFile || searchMode || (sourcesMode && (selectedSource || showAddForm))">
+      <template x-if="!sourcesMode && selectedFile && !searchMode">
+        <span class="tb-title" x-text="selectedFile.basename"></span>
+      </template>
+      <template x-if="!sourcesMode && selectedFile && !searchMode">
+        <span class="tb-slug" x-text="selectedFile.sourceName"></span>
+      </template>
+      <template x-if="!sourcesMode && selectedFile && !searchMode">
+        <button @click="viewMode = viewMode === 'toc' ? 'full' : 'toc'"
+                x-text="viewMode === 'toc' ? 'Full doc' : 'TOC'"></button>
+      </template>
+      <template x-if="searchMode">
+        <span class="tb-title">Search: <em x-text="lastQuery"></em></span>
+      </template>
+      <template x-if="searchMode">
+        <button @click="clearSearch()">✕ Clear</button>
+      </template>
+      <template x-if="sourcesMode && showAddForm">
+        <span class="tb-title">Add New Source</span>
+      </template>
+      <template x-if="sourcesMode && selectedSource && !showAddForm">
+        <span class="tb-title" x-text="selectedSource.name"></span>
+      </template>
+      <template x-if="sourcesMode && selectedSource && !showAddForm">
+        <span class="tb-slug" x-text="selectedSource.repo"></span>
+      </template>
+    </div>
+
+    <!-- Content -->
+    <div class="content-area">
+
+      <!-- Empty state: docs mode -->
+      <template x-if="!sourcesMode && !selectedFile && !searchMode">
+        <div class="empty-state">
+          <span class="icon">📚</span>
+          <span>Select a file or search to get started</span>
+        </div>
+      </template>
+
+      <!-- Search results -->
+      <template x-if="searchMode">
+        <div>
+          <template x-if="!searchResults.length">
+            <div class="loading" x-text="searchLoading ? 'Searching…' : 'No results.'"></div>
+          </template>
+          <div class="search-results">
+            <template x-for="r in searchResults" :key="r.section.id">
+              <div class="result-card" @click="jumpToSection(r)">
+                <div class="result-doc" x-text="r.source_name + ' · ' + r.section.file_path"></div>
+                <div class="result-heading" x-text="r.section.heading || '(top-level content)'"></div>
+                <div class="result-preview" x-text="r.section.content"></div>
+                <div class="result-score" x-text="'score: ' + (r.score * 100).toFixed(1) + '%'"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- File view: TOC mode -->
+      <template x-if="!sourcesMode && selectedFile && !searchMode && viewMode === 'toc'">
+        <div>
+          <div class="toc">
+            <h3>Table of Contents</h3>
+            <template x-if="docLoading">
+              <div class="loading">Loading…</div>
+            </template>
+            <template x-for="entry in toc" :key="entry.id">
+              <div class="toc-entry"
+                   @click="viewMode = 'full'; $nextTick(() => { const el = document.getElementById('sec-' + entry.id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); })">
+                <span class="toc-level" x-text="'H' + entry.level"></span>
+                <span class="toc-heading"
+                      :style="`padding-left: ${(entry.level - 1) * 12}px`"
+                      x-text="entry.heading"></span>
+              </div>
+            </template>
+            <template x-if="!docLoading && !toc.length">
+              <div style="color:var(--text-muted); font-size:.85rem;">No headings found.</div>
+            </template>
+          </div>
+          <button @click="viewMode = 'full'">View full document →</button>
+        </div>
+      </template>
+
+      <!-- File view: full doc mode -->
+      <template x-if="!sourcesMode && selectedFile && !searchMode && viewMode === 'full'">
+        <div>
+          <template x-if="docLoading">
+            <div class="loading">Loading sections…</div>
+          </template>
+          <div class="doc-content">
+            <template x-for="sec in sections" :key="sec.id">
+              <div class="section-block" :id="'sec-' + sec.id">
+                <template x-if="sec.heading">
+                  <div class="section-heading" :class="'h' + sec.level" x-text="sec.heading"></div>
+                </template>
+                <div class="section-content" x-text="sec.content"></div>
+              </div>
+            </template>
+            <template x-if="!docLoading && !sections.length">
+              <div class="loading">No sections found.</div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Sources: empty state -->
+      <template x-if="sourcesMode && !selectedSource && !showAddForm">
+        <div class="empty-state">
+          <span class="icon">📂</span>
+          <span>Select a source or click + Add Source</span>
+        </div>
+      </template>
+
+      <!-- Sources: add form -->
+      <template x-if="sourcesMode && showAddForm">
+        <div class="source-detail">
+          <h3>Add New Source</h3>
+          <div class="field">
+            <label>Name</label>
+            <input type="text" x-model="addForm.name" placeholder="my-library">
+            <div class="field-hint">Unique identifier used by the CLI and agents.</div>
+          </div>
+          <div class="field">
+            <label>Repository (owner/repo)</label>
+            <input type="text" x-model="addForm.repo" placeholder="kubernetes/website">
+          </div>
+          <div class="field">
+            <label>Branch</label>
+            <input type="text" x-model="addForm.branch" placeholder="main">
+          </div>
+          <div class="field">
+            <label>Docs Folders (optional)</label>
+            <input type="text" x-model="addForm.docs_folders_str" placeholder="docs, guides/reference">
+            <div class="field-hint">Comma-separated paths. Leave empty to index the whole repo.</div>
+          </div>
+          <div class="field">
+            <label>File Glob</label>
+            <input type="text" x-model="addForm.file_glob" placeholder="*.md">
+          </div>
+          <div class="error-msg" x-show="formError" x-text="formError"></div>
+          <div class="form-actions">
+            <button class="primary" @click="submitAdd()" :disabled="formBusy">
+              <span x-show="formBusy" class="spin">⟳</span>
+              <span x-show="!formBusy">Add &amp; Sync</span>
+            </button>
+            <button @click="showAddForm = false; formError = ''">Cancel</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- Sources: source detail -->
+      <template x-if="sourcesMode && selectedSource && !showAddForm">
+        <div>
+          <div class="source-detail">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;margin-bottom:.75rem;">
+              <div>
+                <div style="font-size:1.15rem;font-weight:700;" x-text="selectedSource.name"></div>
+                <div style="font-size:.82rem;color:var(--text-muted);font-family:monospace;"
+                     x-text="selectedSource.repo"></div>
+              </div>
+              <span class="status-badge" :class="'status-'+selectedSource.status"
+                    x-text="selectedSource.status"></span>
+            </div>
+            <div class="detail-meta">
+              <span>Branch: <b x-text="selectedSource.branch"></b></span>
+              <span>Glob: <b x-text="selectedSource.file_glob"></b></span>
+              <span x-show="selectedSource.docs_folders && selectedSource.docs_folders.length">
+                Folders: <b x-text="(selectedSource.docs_folders || []).join(', ')"></b>
+              </span>
+              <span>Sections: <b x-text="selectedSource.section_count"></b></span>
+              <span x-show="selectedSource.last_synced_at">
+                Last sync: <b x-text="fmtDate(selectedSource.last_synced_at)"></b>
+              </span>
+            </div>
+            <div class="error-msg" x-show="selectedSource.status === 'error'"
+                 x-text="selectedSource.error_message"></div>
+            <div class="form-actions">
+              <button class="primary" @click="triggerSync(selectedSource.id)"
+                      :disabled="selectedSource.status === 'syncing'">
+                <span x-show="selectedSource.status === 'syncing'" class="spin">⟳</span>
+                ↺ Sync Now
+              </button>
+              <button @click="openEditForm(selectedSource)">✏ Edit</button>
+              <button class="danger" @click="confirmDelete(selectedSource)">🗑 Delete</button>
+            </div>
+          </div>
+
+          <!-- Edit form -->
+          <template x-if="editingSource">
+            <div class="source-detail">
+              <h3>Edit Source</h3>
+              <div class="field">
+                <label>Name</label>
+                <input type="text" x-model="editForm.name">
+              </div>
+              <div class="field">
+                <label>Repository</label>
+                <input type="text" x-model="editForm.repo">
+              </div>
+              <div class="field">
+                <label>Branch</label>
+                <input type="text" x-model="editForm.branch">
+              </div>
+              <div class="field">
+                <label>Docs Folders</label>
+                <input type="text" x-model="editForm.docs_folders_str" placeholder="docs, guides">
+                <div class="field-hint">Changing this resets the commit SHA and forces a full re-index.</div>
+              </div>
+              <div class="field">
+                <label>File Glob</label>
+                <input type="text" x-model="editForm.file_glob">
+              </div>
+              <div class="error-msg" x-show="formError" x-text="formError"></div>
+              <div class="form-actions">
+                <button class="primary" @click="submitEdit()" :disabled="formBusy">
+                  <span x-show="formBusy" class="spin">⟳</span>
+                  <span x-show="!formBusy">Save</span>
+                </button>
+                <button @click="editingSource = false; formError = ''">Cancel</button>
+              </div>
+            </div>
+          </template>
+
+          <!-- File browser -->
+          <template x-if="!editingSource">
+            <div class="source-detail">
+              <h3>Indexed Files (<span x-text="sourceFiles.length"></span>)</h3>
+              <div style="max-height:300px;overflow-y:auto;">
+                <template x-for="f in sourceFiles" :key="f">
+                  <div class="file-item" x-text="f"></div>
+                </template>
+                <div x-show="!sourceFiles.length"
+                     style="font-size:.82rem;color:var(--text-muted);padding:.5rem;">
+                  No files indexed yet. Run a sync.
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+    </div><!-- end content-area -->
+  </div><!-- end main -->
+
+</div><!-- end layout -->
+
+<script>
+function app() {
+  return {
+    sourcesMode: false,
+    stats: null,
+
+    // Docs / files
+    sources: [],
+    allFiles: [],
+    sourceFilter: '',
+    loading: false,
+    selectedFile: null,
+    sections: [],
+    toc: [],
+    viewMode: 'toc',
+    docLoading: false,
+
+    // Search
+    searchQuery: '',
+    searchResults: [],
+    searchMode: false,
+    searchLoading: false,
+    lastQuery: '',
+
+    // Sources management
+    selectedSource: null,
+    sourceFiles: [],
+    showAddForm: false,
+    editingSource: false,
+    addForm: { name: '', repo: '', branch: 'main', docs_folders_str: '', file_glob: '*.md' },
+    editForm: { name: '', repo: '', branch: '', docs_folders_str: '', file_glob: '' },
+    formBusy: false,
+    formError: '',
+
+    get statsText() {
+      if (!this.stats) return '';
+      const s = this.stats;
+      return `${s.source_count} source${s.source_count !== 1 ? 's' : ''} · ` +
+             `${s.file_count} file${s.file_count !== 1 ? 's' : ''} · ` +
+             `${s.section_count} section${s.section_count !== 1 ? 's' : ''}`;
+    },
+
+    async init() {
+      await Promise.all([this.loadStats(), this.loadSources()]);
+      await this.loadFiles();
+      setInterval(() => {
+        if (this.sources.some(s => s.status === 'syncing')) this.refreshSyncStatuses();
+      }, 5000);
+    },
+
+    async api(method, path, body = null) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch('/api' + path, opts);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || res.statusText);
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    },
+
+    async loadStats() {
+      try { this.stats = await this.api('GET', '/stats'); } catch {}
+    },
+
+    async loadSources() {
+      try { this.sources = await this.api('GET', '/sources'); } catch {}
+    },
+
+    async loadFiles() {
+      this.loading = true;
+      this.allFiles = [];
+      try {
+        const toLoad = this.sourceFilter
+          ? [this.sources.find(s => s.id == this.sourceFilter)].filter(Boolean)
+          : this.sources;
+        const results = await Promise.all(
+          toLoad.map(async s => {
+            try {
+              const files = await this.api('GET', `/sources/${s.id}/files`);
+              return files.map(f => ({
+                key: `${s.id}:${f}`,
+                sourceId: s.id,
+                sourceName: s.name,
+                filePath: f,
+                basename: f.split('/').pop(),
+              }));
+            } catch { return []; }
+          })
+        );
+        this.allFiles = results.flat();
+      } catch {}
+      this.loading = false;
+    },
+
+    async selectFile(f) {
+      this.selectedFile = f;
+      this.searchMode = false;
+      this.viewMode = 'toc';
+      this.sections = [];
+      this.toc = [];
+      this.docLoading = true;
+      try {
+        const params = new URLSearchParams({
+          source_id: f.sourceId,
+          file_path: f.filePath,
+          limit: 500,
+        });
+        this.sections = await this.api('GET', `/docs?${params}`);
+        this.toc = this.sections.filter(s => s.heading && s.level);
+      } catch (e) {
+        console.error(e);
+      }
+      this.docLoading = false;
+    },
+
+    async runSearch() {
+      if (!this.searchQuery.trim()) return;
+      this.searchMode = true;
+      this.selectedFile = null;
+      this.searchResults = [];
+      this.searchLoading = true;
+      this.lastQuery = this.searchQuery;
+      try {
+        const params = new URLSearchParams({ q: this.searchQuery, limit: 20 });
+        if (this.sourceFilter) params.set('source_id', this.sourceFilter);
+        const res = await fetch('/api/docs/search?' + params);
+        this.searchResults = res.ok ? await res.json() : [];
+      } catch {}
+      this.searchLoading = false;
+    },
+
+    clearSearch() {
+      this.searchQuery = '';
+      this.searchMode = false;
+      this.searchResults = [];
+    },
+
+    async jumpToSection(result) {
+      let f = this.allFiles.find(f =>
+        f.sourceId === result.section.source_id && f.filePath === result.section.file_path
+      );
+      if (!f) {
+        const source = this.sources.find(s => s.id === result.section.source_id);
+        if (!source) return;
+        f = {
+          key: `${source.id}:${result.section.file_path}`,
+          sourceId: source.id,
+          sourceName: source.name,
+          filePath: result.section.file_path,
+          basename: result.section.file_path.split('/').pop(),
+        };
+      }
+      await this.selectFile(f);
+      this.viewMode = 'full';
+      await this.$nextTick();
+      const el = document.getElementById('sec-' + result.section.id);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+
+    toggleSourcesMode() {
+      this.sourcesMode = !this.sourcesMode;
+      if (this.sourcesMode) {
+        this.clearSearch();
+      } else {
+        this.selectedSource = null;
+        this.showAddForm = false;
+        this.loadFiles();
+      }
+    },
+
+    async selectSource(s) {
+      this.selectedSource = s;
+      this.editingSource = false;
+      this.showAddForm = false;
+      this.formError = '';
+      try {
+        this.sourceFiles = await this.api('GET', `/sources/${s.id}/files`);
+      } catch { this.sourceFiles = []; }
+    },
+
+    openAddForm() {
+      this.showAddForm = true;
+      this.editingSource = false;
+      this.selectedSource = null;
+      this.addForm = { name: '', repo: '', branch: 'main', docs_folders_str: '', file_glob: '*.md' };
+      this.formError = '';
+    },
+
+    async submitAdd() {
+      this.formBusy = true;
+      this.formError = '';
+      try {
+        const body = {
+          name: this.addForm.name.trim(),
+          repo: this.addForm.repo.trim(),
+          branch: this.addForm.branch.trim() || 'main',
+          docs_folders: this.parseFolders(this.addForm.docs_folders_str),
+          file_glob: this.addForm.file_glob.trim() || '*.md',
+        };
+        const created = await this.api('POST', '/sources', body);
+        await this.loadSources();
+        this.showAddForm = false;
+        await this.api('POST', `/sources/${created.id}/sync`);
+        await this.selectSource(this.sources.find(s => s.id === created.id) || created);
+      } catch (e) {
+        this.formError = e.message;
+      }
+      this.formBusy = false;
+    },
+
+    openEditForm(s) {
+      this.editingSource = true;
+      this.editForm = {
+        name: s.name,
+        repo: s.repo,
+        branch: s.branch,
+        docs_folders_str: (s.docs_folders || []).join(', '),
+        file_glob: s.file_glob,
+      };
+      this.formError = '';
+    },
+
+    async submitEdit() {
+      this.formBusy = true;
+      this.formError = '';
+      try {
+        const body = {
+          name: this.editForm.name.trim(),
+          repo: this.editForm.repo.trim(),
+          branch: this.editForm.branch.trim(),
+          docs_folders: this.parseFolders(this.editForm.docs_folders_str),
+          file_glob: this.editForm.file_glob.trim(),
+        };
+        const updated = await this.api('PUT', `/sources/${this.selectedSource.id}`, body);
+        await this.loadSources();
+        this.selectedSource = updated;
+        this.editingSource = false;
+      } catch (e) {
+        this.formError = e.message;
+      }
+      this.formBusy = false;
+    },
+
+    async triggerSync(id) {
+      try {
+        await this.api('POST', `/sources/${id}/sync`);
+        this.sources = this.sources.map(s =>
+          s.id === id ? { ...s, status: 'syncing' } : s
+        );
+        if (this.selectedSource && this.selectedSource.id === id)
+          this.selectedSource = { ...this.selectedSource, status: 'syncing' };
+      } catch (e) {
+        alert('Sync failed: ' + e.message);
+      }
+    },
+
+    async confirmDelete(s) {
+      if (!confirm(`Delete source "${s.name}" and all its indexed sections?`)) return;
+      try {
+        await this.api('DELETE', `/sources/${s.id}`);
+        this.sources = this.sources.filter(x => x.id !== s.id);
+        this.selectedSource = null;
+        this.sourceFiles = [];
+        await this.loadStats();
+        await this.loadFiles();
+      } catch (e) {
+        alert('Delete failed: ' + e.message);
+      }
+    },
+
+    async refreshSyncStatuses() {
+      try {
+        const fresh = await this.api('GET', '/sources');
+        const wasAnySyncing = this.sources.some(s => s.status === 'syncing');
+        this.sources = fresh;
+        if (this.selectedSource) {
+          const updated = fresh.find(s => s.id === this.selectedSource.id);
+          if (updated) this.selectedSource = updated;
+        }
+        await this.loadStats();
+        if (wasAnySyncing && !fresh.some(s => s.status === 'syncing')) {
+          await this.loadFiles();
+        }
+      } catch {}
+    },
+
+    parseFolders(str) {
+      return str.split(',').map(s => s.trim()).filter(Boolean);
+    },
+
+    fmtDate(iso) {
+      if (!iso) return '';
+      return new Date(iso + (iso.endsWith('Z') ? '' : 'Z')).toLocaleString();
+    },
+  };
+}
+</script>
+</body>
+</html>

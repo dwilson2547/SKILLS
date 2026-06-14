@@ -1,9 +1,0 @@
-[submodule "ai_notes_server"]
-	path = ai_notes_server
-	url = git@github.com:dwilson2547/ai_notes_server.git
-[submodule "context-store"]
-	path = context-store
-	url = git@github.com:dwilson2547/context-store.git
-[submodule "ai_tool_docs"]
-	path = ai_tool_docs
-	url = git@github.com:dwilson2547/ai_tool_docs.git

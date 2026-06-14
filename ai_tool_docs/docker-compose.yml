@@ -1,0 +1,20 @@
+services:
+  api:
+    build: ./api
+    image: dwilson2547/ai-tool-docs-api:latest
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./data:/data
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+    restart: unless-stopped
+
+  ui:
+    build: ./ui
+    image: dwilson2547/ai-tool-docs-ui:latest
+    ports:
+      - "3002:80"
+    depends_on:
+      - api
+    restart: unless-stopped

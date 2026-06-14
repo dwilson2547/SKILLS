@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Playbooks</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f3f4f6;
+    --surface: #ffffff;
+    --sidebar-bg: #f8f9fa;
+    --border: #e5e7eb;
+    --text: #111827;
+    --text-muted: #6b7280;
+    --accent: #7c3aed;
+    --accent-hover: #6d28d9;
+    --accent-light: #ede9fe;
+    --danger: #dc2626;
+    --tag-bg: #ede9fe;
+    --tag-text: #5b21b6;
+    --stale-bg: #fef9c3;
+    --stale-text: #854d0e;
+    --card-hover: #f5f3ff;
+    --card-selected: #ede9fe;
+  }
+
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
+         color: var(--text); height: 100vh; display: flex; flex-direction: column;
+         overflow: hidden; }
+
+  nav { display: flex; align-items: center; justify-content: space-between;
+        padding: .6rem 1.2rem; background: var(--surface); border-bottom: 1px solid var(--border);
+        flex-shrink: 0; gap: .75rem; }
+  nav .brand { font-weight: 700; font-size: 1.05rem; color: var(--accent); white-space: nowrap; }
+  nav .nav-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+  nav .count { font-size: .8rem; color: var(--text-muted); }
+
+  .layout { display: flex; flex: 1; overflow: hidden; }
+
+  .sidebar { width: 320px; flex-shrink: 0; display: flex; flex-direction: column;
+             background: var(--sidebar-bg); border-right: 1px solid var(--border);
+             overflow: hidden; }
+  .sidebar-top { padding: .75rem; display: flex; flex-direction: column; gap: .5rem;
+                 border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .search-row { display: flex; gap: .4rem; }
+
+  input[type=text], input[type=search], select {
+    width: 100%; padding: .45rem .6rem; border: 1px solid var(--border);
+    border-radius: 5px; font-size: .85rem; background: var(--surface);
+    color: var(--text); outline: none; }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px #7c3aed22; }
+  select { cursor: pointer; }
+
+  .doc-list { flex: 1; overflow-y: auto; padding: .4rem; }
+  .doc-item { padding: .55rem .65rem; border-radius: 5px; cursor: pointer;
+              margin-bottom: 2px; transition: background .1s; }
+  .doc-item:hover { background: var(--card-hover); }
+  .doc-item.selected { background: var(--card-selected); }
+  .doc-item .doc-title { font-size: .85rem; font-weight: 600; margin-bottom: .15rem; }
+  .doc-item .doc-slug { font-size: .75rem; color: var(--text-muted); font-family: monospace;
+                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .doc-item .doc-meta { display: flex; gap: .4rem; align-items: center; margin-top: .2rem; flex-wrap: wrap; }
+  .tag { display: inline-block; padding: 1px 6px; background: var(--tag-bg);
+         color: var(--tag-text); border-radius: 3px; font-size: .72rem; font-weight: 500; }
+  .stale-badge { display: inline-block; padding: 1px 6px; background: var(--stale-bg);
+                 color: var(--stale-text); border-radius: 3px; font-size: .72rem; font-weight: 500; }
+  .depth-indent { display: inline-block; width: 0; }
+
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .toolbar { display: flex; align-items: center; gap: .6rem; padding: .6rem 1rem;
+             border-bottom: 1px solid var(--border); background: var(--surface);
+             flex-shrink: 0; flex-wrap: wrap; }
+  .toolbar .tb-title { font-weight: 600; font-size: .95rem; flex: 1; min-width: 0;
+                       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toolbar .tb-slug { font-size: .78rem; color: var(--text-muted); font-family: monospace; }
+
+  .content-area { flex: 1; overflow-y: auto; padding: 1.5rem; }
+
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center;
+                 height: 100%; color: var(--text-muted); gap: .5rem; }
+  .empty-state .icon { font-size: 2.5rem; }
+
+  .toc { margin-bottom: 1.5rem; background: var(--surface); border: 1px solid var(--border);
+         border-radius: 8px; padding: 1rem; }
+  .toc h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em;
+             color: var(--text-muted); margin-bottom: .6rem; }
+  .toc-entry { display: flex; align-items: center; gap: .4rem; padding: .25rem 0;
+               border-bottom: 1px solid var(--border); cursor: pointer; }
+  .toc-entry:last-child { border-bottom: none; }
+  .toc-entry:hover .toc-heading { color: var(--accent); text-decoration: underline; }
+  .toc-heading { font-size: .85rem; }
+  .toc-level { font-size: .72rem; color: var(--text-muted); background: var(--bg);
+               padding: 1px 5px; border-radius: 3px; font-family: monospace; }
+
+  .doc-content { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+                 padding: 1.5rem; }
+  .section-block { margin-bottom: 1.5rem; padding-bottom: 1.5rem;
+                   border-bottom: 1px solid var(--border); }
+  .section-block:last-child { border-bottom: none; margin-bottom: 0; }
+  .section-heading { font-weight: 600; margin-bottom: .5rem; color: var(--text); }
+  .h1 { font-size: 1.4rem; }
+  .h2 { font-size: 1.15rem; }
+  .h3 { font-size: 1rem; }
+  .h4, .h5, .h6 { font-size: .9rem; }
+  .section-slug-label { font-size: .72rem; color: var(--text-muted); font-family: monospace;
+                        margin-bottom: .5rem; }
+  .section-content { font-size: .875rem; line-height: 1.65; white-space: pre-wrap;
+                     word-break: break-word; }
+
+  .search-results { display: flex; flex-direction: column; gap: .75rem; }
+  .result-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+                 padding: 1rem; cursor: pointer; transition: border-color .1s; }
+  .result-card:hover { border-color: var(--accent); }
+  .result-doc { font-size: .75rem; color: var(--text-muted); margin-bottom: .2rem; }
+  .result-heading { font-weight: 600; font-size: .9rem; margin-bottom: .35rem; }
+  .result-preview { font-size: .82rem; color: var(--text-muted); white-space: pre-wrap;
+                    word-break: break-word; }
+  .result-score { font-size: .72rem; color: var(--accent); font-family: monospace; }
+
+  .scope-breadcrumb { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+  .scope-part { font-size: .8rem; color: var(--accent); cursor: pointer; }
+  .scope-part:hover { text-decoration: underline; }
+  .scope-sep { color: var(--text-muted); font-size: .8rem; }
+
+  button { padding: .35rem .75rem; border: 1px solid var(--border); border-radius: 5px;
+           font-size: .82rem; cursor: pointer; background: var(--surface); color: var(--text);
+           transition: background .1s; }
+  button:hover { background: var(--bg); }
+  button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button.ghost { border: none; background: transparent; padding: .25rem .5rem; }
+  button.ghost:hover { background: var(--bg); }
+
+  .loading { color: var(--text-muted); font-size: .85rem; padding: 1rem; text-align: center; }
+  .error-msg { color: var(--danger); font-size: .82rem; padding: .5rem; }
+</style>
+</head>
+<body x-data="app()" x-init="init()">
+
+<!-- Nav -->
+<nav>
+  <span class="brand">AI Playbooks</span>
+  <div class="nav-actions">
+    <input type="text" placeholder="Search…" style="width:200px"
+           x-model="searchQuery"
+           @keydown.enter="runSearch()"
+           @input="if (!searchQuery) clearSearch()">
+    <button class="primary" @click="runSearch()">Search</button>
+    <button @click="clearSearch(); loadDocs()" title="Refresh">↺</button>
+    <span class="count" x-text="docs.length + ' playbooks'"></span>
+  </div>
+</nav>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-top">
+      <div class="search-row">
+        <input type="text" placeholder="Filter by scope…" x-model="scopeFilter"
+               @input="applyFilters()" style="flex:1">
+        <select x-model="statusFilter" @change="applyFilters()" style="width:auto">
+          <option value="active">Active</option>
+          <option value="stale">Stale</option>
+          <option value="all">All</option>
+        </select>
+      </div>
+      <template x-if="scopeFilter">
+        <div class="scope-breadcrumb">
+          <span class="scope-part" @click="scopeFilter=''; applyFilters()">root</span>
+          <template x-for="(part, i) in scopeFilter.split('/')" :key="i">
+            <span style="display:contents">
+              <span class="scope-sep">/</span>
+              <span class="scope-part"
+                    @click="scopeFilter = scopeFilter.split('/').slice(0, i+1).join('/'); applyFilters()"
+                    x-text="part"></span>
+            </span>
+          </template>
+        </div>
+      </template>
+    </div>
+    <div class="doc-list">
+      <template x-if="loading && !docs.length">
+        <div class="loading">Loading…</div>
+      </template>
+      <template x-if="!loading && !filteredDocs.length">
+        <div class="loading">No playbooks found.</div>
+      </template>
+      <template x-for="doc in filteredDocs" :key="doc.slug">
+        <div class="doc-item" :class="{ selected: selected && selected.slug === doc.slug }"
+             @click="selectDoc(doc)">
+          <div class="doc-title" x-text="doc.title || doc.slug"></div>
+          <div class="doc-slug" x-text="doc.slug"></div>
+          <div class="doc-meta">
+            <template x-if="doc.status === 'stale'">
+              <span class="stale-badge">stale</span>
+            </template>
+            <template x-for="tag in (doc.tags || '').split(',').filter(t => t.trim())" :key="tag">
+              <span class="tag" x-text="tag.trim()"></span>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Toolbar -->
+    <div class="toolbar" x-show="selected || searchResults.length">
+      <template x-if="selected && !searchMode">
+        <span class="tb-title" x-text="selected.title || selected.slug"></span>
+      </template>
+      <template x-if="searchMode">
+        <span class="tb-title">Search: <em x-text="lastQuery"></em></span>
+      </template>
+      <template x-if="selected && !searchMode">
+        <span class="tb-slug" x-text="selected.slug"></span>
+      </template>
+      <template x-if="selected && !searchMode">
+        <button @click="viewMode = viewMode === 'toc' ? 'full' : 'toc'"
+                x-text="viewMode === 'toc' ? 'Full doc' : 'TOC'"></button>
+      </template>
+      <template x-if="searchMode">
+        <button @click="clearSearch()">✕ Clear</button>
+      </template>
+    </div>
+
+    <!-- Content -->
+    <div class="content-area">
+      <!-- Empty state -->
+      <template x-if="!selected && !searchMode">
+        <div class="empty-state">
+          <span class="icon">📖</span>
+          <span>Select a playbook or search to get started</span>
+        </div>
+      </template>
+
+      <!-- Search results -->
+      <template x-if="searchMode">
+        <div>
+          <template x-if="!searchResults.length">
+            <div class="loading" x-text="searchLoading ? 'Searching…' : 'No results.'"></div>
+          </template>
+          <div class="search-results">
+            <template x-for="r in searchResults" :key="r.section_slug">
+              <div class="result-card" @click="jumpToSection(r)">
+                <div class="result-doc" x-text="r.document_slug"></div>
+                <div class="result-heading" x-text="r.section_heading || '(no heading)'"></div>
+                <div class="result-preview" x-text="r.preview"></div>
+                <div class="result-score" x-text="'score: ' + r.score"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Document view -->
+      <template x-if="selected && !searchMode">
+        <div>
+          <!-- TOC mode -->
+          <template x-if="viewMode === 'toc'">
+            <div>
+              <template x-if="selected.description">
+                <p style="margin-bottom:1rem; color: var(--text-muted); font-size:.875rem"
+                   x-text="selected.description"></p>
+              </template>
+              <div class="toc">
+                <h3>Table of Contents</h3>
+                <template x-for="entry in toc" :key="entry.slug">
+                  <div class="toc-entry" @click="viewMode = 'full'; scrollToSection(entry.heading_slug)">
+                    <span class="toc-level" x-text="'H' + entry.level"></span>
+                    <span class="toc-heading"
+                          :style="`padding-left: ${(entry.level - 1) * 12}px`"
+                          x-text="entry.heading"></span>
+                  </div>
+                </template>
+                <template x-if="!toc.length">
+                  <div style="color:var(--text-muted); font-size:.85rem">No sections.</div>
+                </template>
+              </div>
+              <button @click="viewMode = 'full'">View full document →</button>
+            </div>
+          </template>
+
+          <!-- Full doc mode -->
+          <template x-if="viewMode === 'full'">
+            <div>
+              <template x-if="selected.description">
+                <p style="margin-bottom:1rem; color: var(--text-muted); font-size:.875rem"
+                   x-text="selected.description"></p>
+              </template>
+              <div class="doc-content">
+                <template x-if="docLoading">
+                  <div class="loading">Loading sections…</div>
+                </template>
+                <template x-for="sec in sections" :key="sec.slug">
+                  <div class="section-block" :id="'sec-' + sec.heading_slug">
+                    <template x-if="sec.heading">
+                      <div class="section-heading" :class="'h' + sec.level" x-text="sec.heading"></div>
+                    </template>
+                    <div class="section-slug-label" x-text="sec.slug"></div>
+                    <div class="section-content" x-text="sec.content"></div>
+                  </div>
+                </template>
+                <template x-if="!docLoading && !sections.length">
+                  <div class="loading">No sections found.</div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api';
+
+function app() {
+  return {
+    docs: [],
+    filteredDocs: [],
+    selected: null,
+    sections: [],
+    toc: [],
+    viewMode: 'toc',
+    loading: false,
+    docLoading: false,
+    scopeFilter: '',
+    statusFilter: 'active',
+    searchQuery: '',
+    searchResults: [],
+    searchMode: false,
+    searchLoading: false,
+    lastQuery: '',
+
+    async init() {
+      await this.loadDocs();
+    },
+
+    async loadDocs() {
+      this.loading = true;
+      try {
+        const params = new URLSearchParams({ status: this.statusFilter });
+        if (this.scopeFilter) params.set('scope', this.scopeFilter);
+        const r = await fetch(`${API}/playbooks?${params}`);
+        this.docs = await r.json();
+        this.filteredDocs = this.docs;
+      } catch (e) {
+        console.error(e);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    applyFilters() {
+      this.loadDocs();
+    },
+
+    async selectDoc(doc) {
+      this.selected = doc;
+      this.searchMode = false;
+      this.viewMode = 'toc';
+      this.sections = [];
+      this.toc = [];
+      this.docLoading = true;
+      try {
+        const r = await fetch(`${API}/playbooks/${encodeSlug(doc.slug)}/toc`);
+        const data = await r.json();
+        this.toc = data.sections || [];
+      } catch (e) {
+        console.error(e);
+      }
+      await this.loadSections(doc.slug);
+      this.docLoading = false;
+    },
+
+    async loadSections(slug) {
+      try {
+        const r = await fetch(`${API}/playbooks/${encodeSlug(slug)}`);
+        const data = await r.json();
+        // Parse sections from returned content + toc headings
+        this.sections = this.toc.map(t => ({
+          slug: t.slug,
+          heading: t.heading,
+          heading_slug: t.slug.split('#')[1] || '',
+          level: t.level,
+          content: '',
+          position: t.position,
+        }));
+        // Load each section's content
+        await Promise.all(
+          this.toc.map(async (t, i) => {
+            const hSlug = t.slug.split('#')[1];
+            if (!hSlug) return;
+            try {
+              const sr = await fetch(`${API}/playbooks/${encodeSlug(slug)}/sections/${hSlug}`);
+              if (sr.ok) {
+                const sec = await sr.json();
+                this.sections[i].content = sec.content;
+              }
+            } catch {}
+          })
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    },
+
+    async runSearch() {
+      if (!this.searchQuery.trim()) return;
+      this.searchMode = true;
+      this.selected = null;
+      this.searchResults = [];
+      this.searchLoading = true;
+      this.lastQuery = this.searchQuery;
+      try {
+        const r = await fetch(`${API}/playbooks/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: this.searchQuery, limit: 10, status: this.statusFilter }),
+        });
+        this.searchResults = await r.json();
+      } catch (e) {
+        console.error(e);
+      } finally {
+        this.searchLoading = false;
+      }
+    },
+
+    clearSearch() {
+      this.searchQuery = '';
+      this.searchMode = false;
+      this.searchResults = [];
+    },
+
+    async jumpToSection(result) {
+      const [docSlug, hSlug] = result.section_slug.split('#');
+      const doc = this.docs.find(d => d.slug === docSlug);
+      if (doc) {
+        await this.selectDoc(doc);
+        this.$nextTick(() => this.scrollToSection(hSlug));
+      }
+    },
+
+    scrollToSection(hSlug) {
+      this.viewMode = 'full';
+      this.$nextTick(() => {
+        const el = document.getElementById('sec-' + hSlug);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    },
+  };
+}
+
+function encodeSlug(slug) {
+  return slug.split('/').map(s => encodeURIComponent(s)).join('/');
+}
+</script>
+</body>
+</html>
