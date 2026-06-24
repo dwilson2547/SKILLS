@@ -60,23 +60,23 @@ workman note get NOTE-001
 
 ---
 
-## Escalate to Playbooks
+## Escalate to Context Store
 
 When saving a note, ask: *does this content have headers or span multiple steps?*
 
-**If yes — ingest to playbooks first, then add a pointer note in workman:**
+**If yes — ingest to context first, then add a pointer note in workman:**
 
 ```bash
 # Write the structured content to a temp file, then ingest
-playbooks ingest /tmp/strategy.md --slug "scope/topic" --description "..." --tags "tag1,tag2"
+context ingest /tmp/strategy.md --slug "scope/topic" --description "..." --tags "tag1,tag2"
 
 # Then add a pointer note in workman
 workman note add --title "Topic Strategy" \
-  --body "Full procedure documented. See playbooks: scope/topic" \
+  --body "Full procedure documented. See context: scope/topic" \
   --tags "scope:domain,tag1,tag2"
 ```
 
-**Playbooks is the living source of truth for structured documents.** If a plan or strategy was
-updated this session, the playbook must be updated too — don't let notes point to stale content.
+**Context Store is the living source of truth for structured documents.** If a plan or strategy was
+updated this session, the context document must be updated too — don't let notes point to stale content.
 
-Use `playbooks update <slug> --file <file>` to keep playbooks current whenever the underlying document changes.
+Use `context update <slug> --file <file>` to keep context current whenever the underlying document changes.

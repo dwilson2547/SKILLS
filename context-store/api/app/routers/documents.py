@@ -53,8 +53,8 @@ def _tag_filter(doc: Document, tag_list: list[str]) -> bool:
 
 # ── List all documents ────────────────────────────────────────────────────────
 
-@router.get("/playbooks", response_model=list[DocumentMeta])
-def list_playbooks(
+@router.get("/context", response_model=list[DocumentMeta])
+def list_documents(
     tags: Optional[str] = None,
     scope: Optional[str] = None,
     status: str = Query("active"),
@@ -100,8 +100,8 @@ def list_slugs(
 
 # ── Semantic search ───────────────────────────────────────────────────────────
 
-@router.post("/playbooks/search", response_model=list[SearchResult])
-def search_playbooks(body: SearchRequest, db: Session = Depends(get_db)):
+@router.post("/context/search", response_model=list[SearchResult])
+def search_documents(body: SearchRequest, db: Session = Depends(get_db)):
     if not embeddings.is_available():
         raise HTTPException(
             status_code=503,
@@ -149,8 +149,8 @@ def search_playbooks(body: SearchRequest, db: Session = Depends(get_db)):
 
 # ── Create document ───────────────────────────────────────────────────────────
 
-@router.post("/playbooks", response_model=DocumentOut, status_code=201)
-def create_playbook(body: DocumentCreate, db: Session = Depends(get_db)):
+@router.post("/context", response_model=DocumentOut, status_code=201)
+def create_document(body: DocumentCreate, db: Session = Depends(get_db)):
     existing = db.query(Document).filter(Document.slug == body.slug).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Slug '{body.slug}' already exists — use PUT to update")
@@ -180,11 +180,11 @@ def create_playbook(body: DocumentCreate, db: Session = Depends(get_db)):
 
 # ── Routes with literal suffixes after {slug:path} — must come before plain get ──
 
-@router.get("/playbooks/{slug:path}/toc", response_model=TocOut)
+@router.get("/context/{slug:path}/toc", response_model=TocOut)
 def get_toc(slug: str, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.slug == slug).first()
     if not doc:
-        raise HTTPException(status_code=404, detail="Playbook not found")
+        raise HTTPException(status_code=404, detail="Document not found")
     sections = [
         TocEntry(
             heading=s.heading,
@@ -197,7 +197,7 @@ def get_toc(slug: str, db: Session = Depends(get_db)):
     return TocOut(slug=doc.slug, title=doc.title, description=doc.description, sections=sections)
 
 
-@router.get("/playbooks/{slug:path}/children", response_model=list[DocumentMeta])
+@router.get("/context/{slug:path}/children", response_model=list[DocumentMeta])
 def get_children(slug: str, db: Session = Depends(get_db)):
     prefix = slug + "/"
     all_docs = db.query(Document).filter(Document.slug.like(prefix + "%")).all()
@@ -207,11 +207,11 @@ def get_children(slug: str, db: Session = Depends(get_db)):
     return children
 
 
-@router.get("/playbooks/{slug:path}/sections/{heading_slug}", response_model=SectionOut)
+@router.get("/context/{slug:path}/sections/{heading_slug}", response_model=SectionOut)
 def get_section(slug: str, heading_slug: str, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.slug == slug).first()
     if not doc:
-        raise HTTPException(status_code=404, detail="Playbook not found")
+        raise HTTPException(status_code=404, detail="Document not found")
     sec = (
         db.query(Section)
         .filter(Section.document_id == doc.id, Section.heading_slug == heading_slug)
@@ -222,13 +222,13 @@ def get_section(slug: str, heading_slug: str, db: Session = Depends(get_db)):
     return sec
 
 
-@router.patch("/playbooks/{slug:path}/status", response_model=DocumentMeta)
+@router.patch("/context/{slug:path}/status", response_model=DocumentMeta)
 def set_status(slug: str, body: StatusUpdate, db: Session = Depends(get_db)):
     if body.status not in ("active", "stale"):
         raise HTTPException(status_code=422, detail="status must be 'active' or 'stale'")
     doc = db.query(Document).filter(Document.slug == slug).first()
     if not doc:
-        raise HTTPException(status_code=404, detail="Playbook not found")
+        raise HTTPException(status_code=404, detail="Document not found")
     doc.status = body.status
     doc.updated_at = datetime.utcnow()
     db.commit()
@@ -238,19 +238,19 @@ def set_status(slug: str, body: StatusUpdate, db: Session = Depends(get_db)):
 
 # ── Get / update / delete document ───────────────────────────────────────────
 
-@router.get("/playbooks/{slug:path}", response_model=DocumentOut)
-def get_playbook(slug: str, db: Session = Depends(get_db)):
+@router.get("/context/{slug:path}", response_model=DocumentOut)
+def get_document(slug: str, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.slug == slug).first()
     if not doc:
-        raise HTTPException(status_code=404, detail="Playbook not found")
+        raise HTTPException(status_code=404, detail="Document not found")
     return doc
 
 
-@router.put("/playbooks/{slug:path}", response_model=DocumentOut)
-def update_playbook(slug: str, body: DocumentUpdate, db: Session = Depends(get_db)):
+@router.put("/context/{slug:path}", response_model=DocumentOut)
+def update_document(slug: str, body: DocumentUpdate, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.slug == slug).first()
     if not doc:
-        raise HTTPException(status_code=404, detail="Playbook not found")
+        raise HTTPException(status_code=404, detail="Document not found")
 
     if body.title is not None:
         doc.title = body.title
@@ -271,10 +271,10 @@ def update_playbook(slug: str, body: DocumentUpdate, db: Session = Depends(get_d
     return doc
 
 
-@router.delete("/playbooks/{slug:path}", status_code=204)
-def delete_playbook(slug: str, db: Session = Depends(get_db)):
+@router.delete("/context/{slug:path}", status_code=204)
+def delete_document(slug: str, db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.slug == slug).first()
     if not doc:
-        raise HTTPException(status_code=404, detail="Playbook not found")
+        raise HTTPException(status_code=404, detail="Document not found")
     db.delete(doc)
     db.commit()

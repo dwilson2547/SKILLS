@@ -1,6 +1,6 @@
-# Curl Fallback — Playbooks Server API
+# Curl Fallback — Context Store API
 
-Use these commands if the `playbooks` CLI is unavailable.
+Use these commands if the `context` CLI is unavailable.
 
 ## List all slugs
 
@@ -12,14 +12,14 @@ curl "http://localhost:8001/slugs?scope=junkyard-scraper"
 ## List documents
 
 ```bash
-curl "http://localhost:8001/playbooks?status=active"
-curl "http://localhost:8001/playbooks?scope=junkyard-scraper"
+curl "http://localhost:8001/context?status=active"
+curl "http://localhost:8001/context?scope=junkyard-scraper"
 ```
 
 ## Ingest a document
 
 ```bash
-curl -X POST http://localhost:8001/playbooks \
+curl -X POST http://localhost:8001/context \
   -H "Content-Type: application/json" \
   -d "{\"slug\": \"junkyard-scraper/auth\", \"title\": \"Auth Strategy\",
        \"content\": \"$(cat auth.md | sed 's/\"/\\\"/g')\",
@@ -29,7 +29,7 @@ curl -X POST http://localhost:8001/playbooks \
 ## Semantic search
 
 ```bash
-curl -X POST http://localhost:8001/playbooks/search \
+curl -X POST http://localhost:8001/context/search \
   -H "Content-Type: application/json" \
   -d '{"query": "OAuth token refresh", "scope": "junkyard-scraper", "limit": 5}'
 ```
@@ -37,25 +37,25 @@ curl -X POST http://localhost:8001/playbooks/search \
 ## Get table of contents
 
 ```bash
-curl "http://localhost:8001/playbooks/junkyard-scraper/auth/toc"
+curl "http://localhost:8001/context/junkyard-scraper/auth/toc"
 ```
 
 ## Get a section
 
 ```bash
-curl "http://localhost:8001/playbooks/junkyard-scraper/auth/sections/oauth-flow"
+curl "http://localhost:8001/context/junkyard-scraper/auth/sections/oauth-flow"
 ```
 
 ## Get full document
 
 ```bash
-curl "http://localhost:8001/playbooks/junkyard-scraper/auth"
+curl "http://localhost:8001/context/junkyard-scraper/auth"
 ```
 
 ## Update document
 
 ```bash
-curl -X PUT http://localhost:8001/playbooks/junkyard-scraper/auth \
+curl -X PUT http://localhost:8001/context/junkyard-scraper/auth \
   -H "Content-Type: application/json" \
   -d '{"content": "# Updated content\n\n..."}'
 ```
@@ -63,7 +63,7 @@ curl -X PUT http://localhost:8001/playbooks/junkyard-scraper/auth \
 ## Mark stale
 
 ```bash
-curl -X PATCH http://localhost:8001/playbooks/junkyard-scraper/auth/status \
+curl -X PATCH http://localhost:8001/context/junkyard-scraper/auth/status \
   -H "Content-Type: application/json" \
   -d '{"status": "stale"}'
 ```
@@ -71,5 +71,5 @@ curl -X PATCH http://localhost:8001/playbooks/junkyard-scraper/auth/status \
 ## Delete
 
 ```bash
-curl -X DELETE http://localhost:8001/playbooks/junkyard-scraper/auth
+curl -X DELETE http://localhost:8001/context/junkyard-scraper/auth
 ```

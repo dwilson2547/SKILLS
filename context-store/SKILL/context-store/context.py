@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""playbooks - CLI for AI Playbooks Server"""
+"""context - CLI for Context Store"""
 
 import argparse
 import json
@@ -9,7 +9,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-BASE_URL = os.environ.get("PLAYBOOKS_API_URL", "http://localhost:8001")
+BASE_URL = os.environ.get("CONTEXT_STORE_API_URL", "http://localhost:8001")
 
 
 def api(method, path, data=None):
@@ -25,7 +25,7 @@ def api(method, path, data=None):
         print(f"Error {e.code}: {e.read().decode()}", file=sys.stderr)
         sys.exit(1)
     except urllib.error.URLError as e:
-        print(f"Cannot reach playbooks server at {BASE_URL}: {e.reason}", file=sys.stderr)
+        print(f"Cannot reach context-store server at {BASE_URL}: {e.reason}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -63,7 +63,7 @@ def cmd_ingest(args):
         data["session_id"] = args.session
     if args.supersedes:
         data["supersedes"] = args.supersedes
-    doc = api("POST", "/playbooks", data)
+    doc = api("POST", "/context", data)
     print(f"Ingested: {doc['slug']}")
 
 
@@ -75,7 +75,7 @@ def cmd_update(args):
         data["description"] = args.description
     if args.tags:
         data["tags"] = args.tags
-    doc = api("PUT", f"/playbooks/{encode_slug(args.slug)}", data)
+    doc = api("PUT", f"/context/{encode_slug(args.slug)}", data)
     print(f"Updated: {doc['slug']}")
 
 
@@ -88,9 +88,9 @@ def cmd_ls(args):
     if args.tags:
         params.append(f"tags={urllib.parse.quote(args.tags)}")
     qs = ("?" + "&".join(params)) if params else ""
-    docs = api("GET", f"/playbooks{qs}")
+    docs = api("GET", f"/context{qs}")
     if not docs:
-        print("No playbooks found.")
+        print("No context documents found.")
         return
     for doc in docs:
         print(fmt_doc(doc))
@@ -98,7 +98,7 @@ def cmd_ls(args):
 
 
 def cmd_toc(args):
-    data = api("GET", f"/playbooks/{encode_slug(args.slug)}/toc")
+    data = api("GET", f"/context/{encode_slug(args.slug)}/toc")
     print(f"{data['slug']} — {data.get('title', '')}")
     if data.get("description"):
         print(f"  {data['description']}")
@@ -113,13 +113,13 @@ def cmd_get(args):
     ref = args.ref
     if "#" in ref:
         slug, h_slug = ref.split("#", 1)
-        sec = api("GET", f"/playbooks/{encode_slug(slug)}/sections/{urllib.parse.quote(h_slug, safe='')}")
+        sec = api("GET", f"/context/{encode_slug(slug)}/sections/{urllib.parse.quote(h_slug, safe='')}")
         if sec.get("heading"):
             print(f"{'#' * sec['level']} {sec['heading']}")
             print()
         print(sec["content"])
     else:
-        doc = api("GET", f"/playbooks/{encode_slug(ref)}")
+        doc = api("GET", f"/context/{encode_slug(ref)}")
         print(f"# {doc.get('title', doc['slug'])}")
         print(f"slug: {doc['slug']}")
         if doc.get("description"):
@@ -132,7 +132,7 @@ def cmd_search(args):
     data = {"query": args.query, "limit": args.limit}
     if args.scope:
         data["scope"] = args.scope
-    results = api("POST", "/playbooks/search", data)
+    results = api("POST", "/context/search", data)
     if not results:
         print("No results.")
         return
@@ -154,22 +154,22 @@ def cmd_slugs(args):
 
 
 def cmd_stale(args):
-    api("PATCH", f"/playbooks/{encode_slug(args.slug)}/status", {"status": "stale"})
+    api("PATCH", f"/context/{encode_slug(args.slug)}/status", {"status": "stale"})
     print(f"Marked stale: {args.slug}")
 
 
 def cmd_activate(args):
-    api("PATCH", f"/playbooks/{encode_slug(args.slug)}/status", {"status": "active"})
+    api("PATCH", f"/context/{encode_slug(args.slug)}/status", {"status": "active"})
     print(f"Marked active: {args.slug}")
 
 
 def cmd_delete(args):
-    api("DELETE", f"/playbooks/{encode_slug(args.slug)}")
+    api("DELETE", f"/context/{encode_slug(args.slug)}")
     print(f"Deleted: {args.slug}")
 
 
 def cmd_children(args):
-    children = api("GET", f"/playbooks/{encode_slug(args.slug)}/children")
+    children = api("GET", f"/context/{encode_slug(args.slug)}/children")
     if not children:
         print("No children.")
         return
@@ -180,10 +180,10 @@ def cmd_children(args):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(prog="playbooks", description="AI Playbooks Server CLI")
+    parser = argparse.ArgumentParser(prog="context", description="Context Store CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("ingest", help="Ingest a markdown file as a new playbook")
+    p = sub.add_parser("ingest", help="Ingest a markdown file as a new context document")
     p.add_argument("file", type=argparse.FileType("r"), help="Markdown file to ingest")
     p.add_argument("--slug", required=True, help="Document slug (e.g. junkyard-scraper/auth)")
     p.add_argument("--title", help="Document title")
@@ -193,7 +193,7 @@ def main():
     p.add_argument("--supersedes", help="Slug of document this replaces")
     p.set_defaults(func=cmd_ingest)
 
-    p = sub.add_parser("update", help="Replace content of an existing playbook")
+    p = sub.add_parser("update", help="Replace content of an existing context document")
     p.add_argument("slug")
     p.add_argument("--file", required=True, type=argparse.FileType("r"), help="New markdown file")
     p.add_argument("--title")
@@ -201,21 +201,21 @@ def main():
     p.add_argument("--tags")
     p.set_defaults(func=cmd_update)
 
-    p = sub.add_parser("ls", help="List playbooks")
+    p = sub.add_parser("ls", help="List context documents")
     p.add_argument("--scope", help="Slug prefix filter")
     p.add_argument("--status", default="active", choices=["active", "stale", "all"])
     p.add_argument("--tags", help="Comma-separated tag filter (AND)")
     p.set_defaults(func=cmd_ls)
 
-    p = sub.add_parser("toc", help="Show table of contents for a playbook")
+    p = sub.add_parser("toc", help="Show table of contents for a context document")
     p.add_argument("slug")
     p.set_defaults(func=cmd_toc)
 
-    p = sub.add_parser("get", help="Get a playbook or section (slug or slug#section)")
+    p = sub.add_parser("get", help="Get a context document or section (slug or slug#section)")
     p.add_argument("ref", help="slug or slug#heading-slug")
     p.set_defaults(func=cmd_get)
 
-    p = sub.add_parser("search", help="Semantic search across playbook sections")
+    p = sub.add_parser("search", help="Semantic search across context document sections")
     p.add_argument("query")
     p.add_argument("--scope", help="Limit to slug prefix")
     p.add_argument("--limit", type=int, default=5)
@@ -225,15 +225,15 @@ def main():
     p.add_argument("--scope", help="Slug prefix filter")
     p.set_defaults(func=cmd_slugs)
 
-    p = sub.add_parser("stale", help="Mark a playbook as stale")
+    p = sub.add_parser("stale", help="Mark a context document as stale")
     p.add_argument("slug")
     p.set_defaults(func=cmd_stale)
 
-    p = sub.add_parser("activate", help="Mark a stale playbook as active")
+    p = sub.add_parser("activate", help="Mark a stale context document as active")
     p.add_argument("slug")
     p.set_defaults(func=cmd_activate)
 
-    p = sub.add_parser("delete", help="Hard delete a playbook")
+    p = sub.add_parser("delete", help="Hard delete a context document")
     p.add_argument("slug")
     p.set_defaults(func=cmd_delete)
 

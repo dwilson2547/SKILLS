@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from .database import Base, engine
-from .routers.playbooks import router
+from .routers.documents import router
 from . import embeddings
 
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AI Playbooks Server",
+    title="Context Store",
     description="Structured reference documents for AI agents",
     version="1.0.0",
     lifespan=lifespan,
@@ -42,7 +42,7 @@ INSTRUCTIONS_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Playbooks Server — API Guide</title>
+<title>Context Store — API Guide</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f9fafb; color: #111827;
@@ -77,23 +77,23 @@ INSTRUCTIONS_HTML = """<!DOCTYPE html>
 </head>
 <body>
 
-<h1>AI Playbooks Server</h1>
+<h1>Context Store</h1>
 <p>Structured reference documents for AI agents. Where notes are minimal one-off facts,
-playbooks are multi-section documents — plans, strategies, procedures — that agents author
+context documents are multi-section documents — plans, strategies, procedures — that agents author
 once and retrieve selectively across sessions.</p>
 
-<h2>Notes vs Playbooks</h2>
+<h2>Notes vs Context docs</h2>
 <div class="tip">
   <strong>Notes</strong> — what agents have learned (minimal, lookup-optimised, one fact per note)<br>
-  <strong>Playbooks</strong> — reference material agents consult (structured, section-retrievable, multi-step)
+  <strong>Context docs</strong> — reference material agents consult (structured, section-retrievable, multi-step)
 </div>
-<p>If it needs headers, it's a playbook. Keep notes as the single entry point — save a pointer
-note after ingesting a playbook: <em>"auth strategy documented — playbooks slug: junkyard-scraper/auth"</em></p>
+<p>If it needs headers, it's a context document. Keep notes as the single entry point — save a pointer
+note after ingesting a context doc: <em>"auth strategy documented — see context slug: junkyard-scraper/auth"</em></p>
 
 <h2>Agent Workflow</h2>
 <div class="warn"><strong>Before ingesting:</strong> run <code>GET /slugs</code> to check what already exists.
 If a related document exists, consider whether this extends it or replaces it (<code>supersedes</code>).</div>
-<div class="tip"><strong>Retrieval order:</strong> check notes for slug pointer → <code>POST /playbooks/search</code>
+<div class="tip"><strong>Retrieval order:</strong> check notes for slug pointer → <code>POST /context/search</code>
 to find sections → <code>/toc</code> to review structure → pull only the section(s) needed.</div>
 
 <h2>Slug Rules</h2>
@@ -112,64 +112,64 @@ to find sections → <code>/toc</code> to review structure → pull only the sec
 GET /slugs?scope=junkyard-scraper</pre>
 
 <h3>List documents</h3>
-<div class="ep"><span class="method get">GET</span><code>/playbooks</code></div>
+<div class="ep"><span class="method get">GET</span><code>/context</code></div>
 <p>Params: <code>tags</code> (comma-separated AND), <code>scope</code> (slug prefix), <code>status</code> (active/stale/all, default: active), <code>session_id</code></p>
-<pre>GET /playbooks?scope=junkyard-scraper&amp;status=active</pre>
+<pre>GET /context?scope=junkyard-scraper&amp;status=active</pre>
 
 <h3>Ingest a document</h3>
-<div class="ep"><span class="method post">POST</span><code>/playbooks</code></div>
+<div class="ep"><span class="method post">POST</span><code>/context</code></div>
 <p>Returns <code>409</code> if slug exists — use PUT to update. If <code>supersedes</code> is set, the referenced document is marked stale.</p>
-<pre>curl -X POST http://localhost:8001/playbooks \\
+<pre>curl -X POST http://localhost:8001/context \\
   -H "Content-Type: application/json" \\
   -d '{"slug": "junkyard-scraper/auth", "title": "Auth Strategy",
        "content": "# Auth Strategy\\n\\n## Overview\\n...",
        "tags": "scraper,auth,junkyard", "supersedes": null}'</pre>
 
 <h3>Semantic search</h3>
-<div class="ep"><span class="method post">POST</span><code>/playbooks/search</code></div>
+<div class="ep"><span class="method post">POST</span><code>/context/search</code></div>
 <p>Searches section embeddings. Returns sections with parent document context.</p>
-<pre>curl -X POST http://localhost:8001/playbooks/search \\
+<pre>curl -X POST http://localhost:8001/context/search \\
   -H "Content-Type: application/json" \\
   -d '{"query": "OAuth token refresh", "scope": "junkyard-scraper", "limit": 5}'</pre>
 
 <h3>Get table of contents</h3>
-<div class="ep"><span class="method get">GET</span><code>/playbooks/{slug}/toc</code></div>
+<div class="ep"><span class="method get">GET</span><code>/context/{slug}/toc</code></div>
 <p>Returns section map without content. Use this before deciding which section to retrieve.</p>
-<pre>GET /playbooks/junkyard-scraper/auth/toc</pre>
+<pre>GET /context/junkyard-scraper/auth/toc</pre>
 
 <h3>Get a section</h3>
-<div class="ep"><span class="method get">GET</span><code>/playbooks/{slug}/sections/{heading_slug}</code></div>
+<div class="ep"><span class="method get">GET</span><code>/context/{slug}/sections/{heading_slug}</code></div>
 <p>Returns content of a single section. <code>heading_slug</code> is the URL-safe heading (from TOC).</p>
-<pre>GET /playbooks/junkyard-scraper/auth/sections/oauth-flow</pre>
+<pre>GET /context/junkyard-scraper/auth/sections/oauth-flow</pre>
 
 <h3>Get full document</h3>
-<div class="ep"><span class="method get">GET</span><code>/playbooks/{slug}</code></div>
+<div class="ep"><span class="method get">GET</span><code>/context/{slug}</code></div>
 <p>Returns full content. Use sparingly — prefer section retrieval to save tokens.</p>
 
 <h3>Update document</h3>
-<div class="ep"><span class="method put">PUT</span><code>/playbooks/{slug}</code></div>
+<div class="ep"><span class="method put">PUT</span><code>/context/{slug}</code></div>
 <p>Replaces content and re-parses all sections. Only include fields to change.</p>
 
 <h3>Set status</h3>
-<div class="ep"><span class="method patch">PATCH</span><code>/playbooks/{slug}/status</code></div>
-<pre>curl -X PATCH http://localhost:8001/playbooks/junkyard-scraper/auth/status \\
+<div class="ep"><span class="method patch">PATCH</span><code>/context/{slug}/status</code></div>
+<pre>curl -X PATCH http://localhost:8001/context/junkyard-scraper/auth/status \\
   -H "Content-Type: application/json" \\
   -d '{"status": "stale"}'</pre>
 
 <h3>Children</h3>
-<div class="ep"><span class="method get">GET</span><code>/playbooks/{slug}/children</code></div>
+<div class="ep"><span class="method get">GET</span><code>/context/{slug}/children</code></div>
 <p>Returns immediate child documents in the slug hierarchy.</p>
-<pre>GET /playbooks/junkyard-scraper/children
+<pre>GET /context/junkyard-scraper/children
 # returns: junkyard-scraper/auth, junkyard-scraper/sites  (not junkyard-scraper/sites/lkq)</pre>
 
 <h3>Delete document</h3>
-<div class="ep"><span class="method del">DELETE</span><code>/playbooks/{slug}</code></div>
+<div class="ep"><span class="method del">DELETE</span><code>/context/{slug}</code></div>
 <p>Hard delete. Prefer <code>PATCH /status</code> with <code>stale</code> for soft deprecation.</p>
 
 <h2>OpenAPI / Interactive Docs</h2>
 <p><a href="/docs">Swagger UI — /docs</a> &nbsp;|&nbsp; <a href="/redoc">ReDoc — /redoc</a></p>
 
-<footer>AI Playbooks Server &bull; SQLite + FastAPI + fastembed (BAAI/bge-small-en-v1.5)</footer>
+<footer>Context Store &bull; SQLite + FastAPI + fastembed (BAAI/bge-small-en-v1.5)</footer>
 </body>
 </html>"""
 

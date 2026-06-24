@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Playbooks</title>
+<title>Context Store</title>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -143,7 +143,7 @@
 
 <!-- Nav -->
 <nav>
-  <span class="brand">AI Playbooks</span>
+  <span class="brand">Context Store</span>
   <div class="nav-actions">
     <input type="text" placeholder="Search…" style="width:200px"
            x-model="searchQuery"
@@ -151,7 +151,7 @@
            @input="if (!searchQuery) clearSearch()">
     <button class="primary" @click="runSearch()">Search</button>
     <button @click="clearSearch(); loadDocs()" title="Refresh">↺</button>
-    <span class="count" x-text="docs.length + ' playbooks'"></span>
+    <span class="count" x-text="docs.length + ' context docs'"></span>
   </div>
 </nav>
 
@@ -187,7 +187,7 @@
         <div class="loading">Loading…</div>
       </template>
       <template x-if="!loading && !filteredDocs.length">
-        <div class="loading">No playbooks found.</div>
+        <div class="loading">No documents found.</div>
       </template>
       <template x-for="doc in filteredDocs" :key="doc.slug">
         <div class="doc-item" :class="{ selected: selected && selected.slug === doc.slug }"
@@ -348,7 +348,7 @@ function app() {
       try {
         const params = new URLSearchParams({ status: this.statusFilter });
         if (this.scopeFilter) params.set('scope', this.scopeFilter);
-        const r = await fetch(`${API}/playbooks?${params}`);
+        const r = await fetch(`${API}/context docs?${params}`);
         this.docs = await r.json();
         this.filteredDocs = this.docs;
       } catch (e) {
@@ -370,7 +370,7 @@ function app() {
       this.toc = [];
       this.docLoading = true;
       try {
-        const r = await fetch(`${API}/playbooks/${encodeSlug(doc.slug)}/toc`);
+        const r = await fetch(`${API}/context docs/${encodeSlug(doc.slug)}/toc`);
         const data = await r.json();
         this.toc = data.sections || [];
       } catch (e) {
@@ -382,7 +382,7 @@ function app() {
 
     async loadSections(slug) {
       try {
-        const r = await fetch(`${API}/playbooks/${encodeSlug(slug)}`);
+        const r = await fetch(`${API}/context docs/${encodeSlug(slug)}`);
         const data = await r.json();
         // Parse sections from returned content + toc headings
         this.sections = this.toc.map(t => ({
@@ -399,7 +399,7 @@ function app() {
             const hSlug = t.slug.split('#')[1];
             if (!hSlug) return;
             try {
-              const sr = await fetch(`${API}/playbooks/${encodeSlug(slug)}/sections/${hSlug}`);
+              const sr = await fetch(`${API}/context docs/${encodeSlug(slug)}/sections/${hSlug}`);
               if (sr.ok) {
                 const sec = await sr.json();
                 this.sections[i].content = sec.content;
@@ -420,7 +420,7 @@ function app() {
       this.searchLoading = true;
       this.lastQuery = this.searchQuery;
       try {
-        const r = await fetch(`${API}/playbooks/search`, {
+        const r = await fetch(`${API}/context docs/search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: this.searchQuery, limit: 10, status: this.statusFilter }),

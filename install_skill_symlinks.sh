@@ -56,7 +56,6 @@ resolve_context_store_target() {
   local candidate
   for candidate in \
     "${SCRIPT_DIR}/context-store/SKILL/context-store" \
-    "${SCRIPT_DIR}/context-store/SKILL/ai-playbooks-server"
   do
     if [[ -f "${candidate}/SKILL.md" ]]; then
       printf '%s\n' "$candidate"

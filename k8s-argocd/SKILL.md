@@ -135,7 +135,7 @@ Edit `infra/cluster-config/dns/dns.yaml` (CoreDNS ConfigMap zone file), bump the
 | `gyopart-dev.local` | gyopart-dev UI (dev equivalents follow this pattern) |
 | `argocd.local` | ArgoCD UI |
 | `notes.ai-services.local` | AI Notes |
-| `playbooks.ai-services.local` | AI Playbooks |
+| `context-store.ai-services.local` | Context Store |
 | `docs.ai-services.local` | AI Tool Docs |
 | `home.cluster.local` | Homepage dashboard |
 
