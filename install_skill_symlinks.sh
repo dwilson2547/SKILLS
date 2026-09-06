@@ -15,8 +15,8 @@ Creates skill symlinks from this SKILLS repo into:
   ~/.agents/skills
   ~/.claude/skills
 
-Standalone skills are auto-discovered from top-level folders that contain SKILL.md.
-Project-backed skills with nested SKILL directories are mapped explicitly.
+Skills are auto-discovered from top-level folders that contain SKILL.md.
+Retired skills live in archive/ and are deliberately not discovered.
 EOF
 }
 
@@ -52,32 +52,6 @@ link_path() {
   fi
 }
 
-resolve_context_store_target() {
-  local candidate
-  for candidate in \
-    "${SCRIPT_DIR}/context-store/SKILL/context-store" \
-  do
-    if [[ -f "${candidate}/SKILL.md" ]]; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
-  done
-
-  log "error: could not find a context-store skill folder under ${SCRIPT_DIR}/context-store/SKILL" >&2
-  return 1
-}
-
-resolve_todo_store_target() {
-  local candidate="${SCRIPT_DIR}/todo-store/SKILL/todo-store"
-  if [[ -f "${candidate}/SKILL.md" ]]; then
-    printf '%s\n' "$candidate"
-    return 0
-  fi
-
-  log "error: could not find a todo-store skill folder under ${SCRIPT_DIR}/todo-store/SKILL" >&2
-  return 1
-}
-
 main() {
   if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     usage
@@ -99,15 +73,6 @@ main() {
     skill_targets["$(basename "$skill_dir")"]="$skill_dir"
   done < <(find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 -type d -exec test -f "{}/SKILL.md" ';' -print0 | sort -z)
 
-  skill_targets["ai-notes-server"]="${SCRIPT_DIR}/ai_notes_server/SKILL/ai-notes-server"
-  skill_targets["ai-tool-docs"]="${SCRIPT_DIR}/ai_tool_docs/SKILL/ai-tool-docs"
-  skill_targets["context-store"]="$(resolve_context_store_target)"
-  if [[ -d "${SCRIPT_DIR}/todo-store" ]]; then
-    skill_targets["todo-store"]="$(resolve_todo_store_target)"
-  fi
-  if [[ -d "${SCRIPT_DIR}/work-manager" ]]; then
-    skill_targets["work-manager"]="${SCRIPT_DIR}/work-manager/SKILL/work-manager"
-  fi
 
   for skill_name in $(printf '%s\n' "${!skill_targets[@]}" | sort); do
     target="${skill_targets[$skill_name]}"
