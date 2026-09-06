@@ -1,6 +1,6 @@
 ---
 name: workspace-conventions
-description: 'Governs structure and knowledge capture for the workspace superrepo. Use when working anywhere under the workspace repo: deciding where a new project/file/chart goes, naming or placing something, classifying a project by domain, or capturing/recalling reusable knowledge (repo-native notes via meta/bin/wsnote). Defers the full spec to the workspace-root CONVENTIONS.md.'
+description: 'Governs structure and knowledge capture for the workspace superrepo. Use when working anywhere under the workspace repo: deciding where a new project/file/chart goes, naming or placing something, classifying a project by domain, or capturing/recalling reusable knowledge. Defers the full spec to the workspace-root CONVENTIONS.md; note-writing mechanics live in meta/bin/wsnote and retrieval in meta/SKILLS/doc-indexer.'
 ---
 
 # Workspace Conventions
@@ -36,22 +36,29 @@ the short, always-applied behavioral layer on top of it.
 
 ## Knowledge capture (the part that's been over- or under-used)
 
-Knowledge lives **in the repo**, nothing else (§5). The old service stack (ai-notes-server,
-context-store, workman notes/playbooks/todos) is retired — do not query or write to it.
+Three scopes, all repo-local markdown, nothing else (§5):
 
-1. **Domain-wide** → `<domain>/docs/` — `topics/` (long-form guidance), `patterns/`, and
-   `notes/` (atomic frontmattered facts, managed by **`meta/bin/wsnote`**).
-2. **Project-specific** → `<project>/docs/` (`issues/`, `decisions/`, `patterns/`, `notes/`).
-   The issue-documentation skill already writes here. Backlogs are `TODO.md` at project root.
-3. **Human prose** → the Obsidian vault. Generally not an agent target.
+1. **Workspace** → `docs/`. True of the workspace itself or the machines it runs on. Narrow by
+   design: if a fact belongs to one domain, it goes in that domain.
+2. **Domain** → `<domain>/docs/`. Cross-project guidance within one domain.
+3. **Project** → `<project>/docs/` (`issues/`, `decisions/`, `patterns/`, `notes/`). The
+   issue-documentation skill already writes here. Backlogs are `TODO.md` at the project root.
+
+**There is no knowledge service.** `ai-notes-server`, `context-store`, `tool-docs`, `todo-store`
+and `workman` were all tried and abandoned — do not reintroduce one. Obsidian as a knowledge tier
+is retired. Notes are for *agents*, not human reading.
+
+Write with **`meta/bin/wsnote`** (`add <scope> …`, where `.` is the workspace scope) — it enforces
+placement and format. Read with **`meta/SKILLS/doc-indexer`** (`search` semantic, `find` literal) — it
+reaches every scope, so you never need to guess where something was filed.
 
 ### Recall — before a task
 
 Map the current working directory to its domain (via the §4 taxonomy). **If** the task is
 non-trivial *and* domain-specific (scrapers, deploy/infra, embedded gotchas, known-tricky areas),
-check that domain's knowledge first: skim `<domain>/docs/notes/README.md` (the one-line index),
-or run `meta/bin/wsnote search <terms> --domain <domain>`. **Skip the lookup** for trivial or
-cosmetic work (renames, formatting, one-line fixes) — not searching is the correct default there.
+run `doc-indexer search` first — results carry the document path, so judge domain relevance from
+the path. **Skip the lookup** for trivial or cosmetic work (renames, formatting, one-line fixes) —
+not searching is the correct default for those.
 
 ### Save — after a task
 
@@ -74,6 +81,17 @@ do **not** save it. When saving:
 
 This deliberately replaces freeform "is this worth saving?" judgment (which oscillates between
 noisy and silent) with a structural gate keyed to the closed domain taxonomy.
+
+## Commits (§9)
+
+Commit early, often, and broken — a commit is a checkpoint, not a certificate that something works.
+Messages record the *why*; the diff already shows the what. Push freely. No per-request approval is
+needed to commit or push here; history rewriting and branch deletion still require one.
+
+**The only gate is secrets and credentials.** Scan the diff for `.env` files, private keys, tokens,
+passwords, credential-bearing connection strings, and kubeconfigs. If you find one, stop and unstage
+— never commit it meaning to fix it in the next commit. In a superrepo the content commit happens
+inside the *submodule*, so apply the check at both levels.
 
 ## Conformance
 

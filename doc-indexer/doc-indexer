@@ -1,0 +1,634 @@
+#!/usr/bin/env python3
+"""doc-indexer — one local index over all workspace markdown, for AI agents.
+
+Replaces the abandoned ai-notes-server / context-store / tool-docs / todo-store /
+workman stack with a single dependency-light tool: pure stdlib for indexing and
+literal search, one optional local embedding backend (fastembed) for semantic
+search. No server, no daemon, no HTTP API. SQLite on disk. See README.md.
+
+Usage:
+  doc-indexer index <base-dir> [--db PATH] [--no-embed] [--model NAME] [--include-archive]
+  doc-indexer search <query> [--db PATH] [-n N] [--dir PREFIX] [--model NAME]
+  doc-indexer find <text> [--dir PATH] [--case-sensitive] [--max-files N]
+
+Output is terse and always includes the document path so an agent can judge
+domain relevance from the path itself.
+
+`index` skips a top-level `archive/` directly under the indexed root by default
+(CONVENTIONS.md §4: "superseded / dead, kept for history only") — pass
+--include-archive to index it anyway. `index` also deduplicates by content
+hash: identical files are chunked/embedded once, but every path is still
+tracked so `find` reports every location. `search` shows one row per distinct
+content, with a canonical path and a count of other copies.
+"""
+import argparse
+import datetime
+import fnmatch
+import hashlib
+import os
+import re
+import sqlite3
+import sys
+
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # see README for why
+SKIP_DIRS = {".git", "node_modules", "venv", ".venv", "__pycache__", "dist", "build"}
+MD_EXT = {".md", ".markdown"}
+CHUNK_TARGET_CHARS = 1200
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS documents (
+    path TEXT PRIMARY KEY,
+    root TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    mtime REAL NOT NULL,
+    hash TEXT NOT NULL,
+    title TEXT,
+    indexed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_documents_hash ON documents(hash);
+CREATE TABLE IF NOT EXISTS chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content_hash TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    start_line INTEGER,
+    end_line INTEGER,
+    text TEXT NOT NULL,
+    embedding BLOB,
+    model TEXT,
+    UNIQUE(content_hash, chunk_index)
+);
+CREATE INDEX IF NOT EXISTS idx_chunks_hash ON chunks(content_hash);
+"""
+
+
+# --------------------------------------------------------------------------
+# Optional-dependency bootstrap: if an embedding venv has been set up next to
+# this script (via install-embeddings.sh), transparently re-exec into it so
+# `search`/embedding-enabled `index` just work. Without it, this script never
+# imports anything beyond stdlib and `index --no-embed` / `find` are fully
+# functional.
+# --------------------------------------------------------------------------
+def _reexec_into_venv():
+    if os.environ.get("_DOC_INDEXER_REEXEC"):
+        return
+    venv_py = os.path.join(SCRIPT_DIR, ".venv", "bin", "python3")
+    if not os.path.isfile(venv_py):
+        return
+    # Note: don't compare realpath(venv_py) to realpath(sys.executable) to
+    # decide whether we're "already there" — a venv's python is commonly a
+    # symlink to the same base interpreter binary, so realpaths collapse to
+    # the same file even though the venv's site-packages (and thus fastembed)
+    # are only active when launched via the venv path itself. The env-var
+    # guard above is what actually prevents infinite re-exec.
+    os.environ["_DOC_INDEXER_REEXEC"] = "1"
+    os.execv(venv_py, [venv_py, os.path.realpath(__file__)] + sys.argv[1:])
+
+
+class EmbeddingUnavailable(RuntimeError):
+    pass
+
+
+def load_embedder(model_name=None):
+    try:
+        from fastembed import TextEmbedding
+    except ImportError:
+        raise EmbeddingUnavailable(
+            "fastembed not installed. Run "
+            "meta/doc-indexer/install-embeddings.sh once to set up the local "
+            "embedding backend (a .venv next to this script), then retry. "
+            "index/find work fine without it."
+        )
+    cache_dir = os.environ.get(
+        "DOC_INDEXER_MODEL_CACHE", os.path.expanduser("~/.cache/doc-indexer/models")
+    )
+    os.makedirs(cache_dir, exist_ok=True)
+    try:
+        return TextEmbedding(model_name=model_name or DEFAULT_MODEL, cache_dir=cache_dir)
+    except Exception as e:  # noqa: BLE001 - surface any backend failure uniformly
+        raise EmbeddingUnavailable(f"failed to load embedding model: {e}")
+
+
+# --------------------------------------------------------------------------
+# DB helpers
+# --------------------------------------------------------------------------
+def default_db_path():
+    return os.environ.get("DOC_INDEXER_DB") or os.path.expanduser(
+        "~/.local/share/doc-indexer/index.db"
+    )
+
+
+def resolve_db_path(cli_value):
+    path = os.path.expanduser(cli_value or default_db_path())
+    return os.path.realpath(path)
+
+
+def _migrate_if_needed(conn):
+    """chunks moved from being keyed by doc_path to content_hash (dedup, see
+    docs/decisions/0002-content-dedup-and-archive-exclusion.md). A DB built by the older schema is
+    detected by the presence of the old doc_path column and rebuilt from
+    scratch — this is a local cache, not a system of record, and the next
+    `index` run repopulates it. Costs one full re-embed, once."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(chunks)")}
+    if "doc_path" in cols:
+        conn.executescript("DROP TABLE IF EXISTS chunks; DROP TABLE IF EXISTS documents;")
+        conn.commit()
+        conn.execute("VACUUM")  # reclaim the dropped tables' pages immediately
+
+
+def open_db(path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    conn = sqlite3.connect(path)
+    conn.execute("PRAGMA foreign_keys = ON")
+    _migrate_if_needed(conn)
+    conn.executescript(SCHEMA)
+    conn.commit()
+    return conn
+
+
+# --------------------------------------------------------------------------
+# Filesystem walk: skip list + best-effort .gitignore, mirrors CONVENTIONS.md
+# --------------------------------------------------------------------------
+def load_gitignore(dirpath):
+    patterns = []
+    gi = os.path.join(dirpath, ".gitignore")
+    if os.path.isfile(gi):
+        try:
+            with open(gi, encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        patterns.append(line)
+        except OSError:
+            pass
+    return patterns
+
+
+def _ignored(name, is_dir, patterns):
+    for pat in patterns:
+        p = pat[1:] if pat.startswith("/") else pat
+        dir_only = p.endswith("/")
+        if dir_only:
+            p = p[:-1]
+        if dir_only and not is_dir:
+            continue
+        if fnmatch.fnmatch(name, p):
+            return True
+    return False
+
+
+def walk_markdown(base_dir, include_archive=True):
+    """Yield absolute paths of markdown files under base_dir, skipping
+    SKIP_DIRS and (best-effort) .gitignore'd paths. Binary files are never
+    matched since we only look at MD_EXT extensions.
+
+    include_archive=False additionally skips a directory literally named
+    "archive" but ONLY when it sits directly under base_dir (CONVENTIONS.md
+    §4's archive/ domain) — a project's own nested `.../archive/` subfolder
+    elsewhere in the tree is left alone. `find` always passes True so its
+    behavior never changes; only `index` exposes this as a flag."""
+
+    def _walk(d, inherited, top):
+        patterns = inherited + load_gitignore(d)
+        try:
+            entries = sorted(os.listdir(d))
+        except OSError:
+            return
+        for name in entries:
+            full = os.path.join(d, name)
+            if os.path.islink(full) and not os.path.exists(full):
+                continue
+            if os.path.isdir(full):
+                if name in SKIP_DIRS or _ignored(name, True, patterns):
+                    continue
+                if top and name == "archive" and not include_archive:
+                    continue
+                yield from _walk(full, patterns, top=False)
+            else:
+                if _ignored(name, False, patterns):
+                    continue
+                if os.path.splitext(name)[1].lower() in MD_EXT:
+                    yield full
+
+    yield from _walk(os.path.realpath(base_dir), [], top=True)
+
+
+# --------------------------------------------------------------------------
+# Chunking
+# --------------------------------------------------------------------------
+def extract_title(text, path):
+    for line in text.splitlines()[:20]:
+        m = re.match(r"^#{1,2}\s+(.+)", line.strip())
+        if m:
+            return m.group(1).strip()
+    return os.path.splitext(os.path.basename(path))[0]
+
+
+def chunk_text(text):
+    """Split into paragraph-aware chunks of ~CHUNK_TARGET_CHARS, tracking
+    1-indexed start/end line numbers so results can cite a location."""
+    lines = text.splitlines()
+    paragraphs = []
+    buf, start = [], None
+    for i, line in enumerate(lines, start=1):
+        if line.strip() == "":
+            if buf:
+                paragraphs.append(("\n".join(buf), start, i - 1))
+                buf, start = [], None
+        else:
+            if start is None:
+                start = i
+            buf.append(line)
+    if buf:
+        paragraphs.append(("\n".join(buf), start, len(lines)))
+
+    chunks = []
+    cur_parts, cur_start, cur_end, cur_len = [], None, None, 0
+    for ptext, ps, pe in paragraphs:
+        if len(ptext) > CHUNK_TARGET_CHARS * 2:
+            # Hard-split an oversized paragraph (e.g. a big code block or
+            # data dump with no blank lines) regardless of buffer state —
+            # flush what's pending first so this never silently produces one
+            # giant chunk that both loses locality and tanks embedding
+            # throughput (batch inference pads to the longest sequence).
+            if cur_parts:
+                chunks.append(("\n\n".join(cur_parts), cur_start, cur_end))
+                cur_parts, cur_len, cur_start = [], 0, None
+            for j in range(0, len(ptext), CHUNK_TARGET_CHARS):
+                chunks.append((ptext[j : j + CHUNK_TARGET_CHARS], ps, pe))
+            continue
+        if cur_len + len(ptext) > CHUNK_TARGET_CHARS and cur_parts:
+            chunks.append(("\n\n".join(cur_parts), cur_start, cur_end))
+            cur_parts, cur_len, cur_start = [], 0, None
+        if cur_start is None:
+            cur_start = ps
+        cur_parts.append(ptext)
+        cur_end = pe
+        cur_len += len(ptext)
+    if cur_parts:
+        chunks.append(("\n\n".join(cur_parts), cur_start, cur_end))
+    if not chunks:
+        chunks = [(text.strip() or "(empty)", 1, max(len(lines), 1))]
+    return chunks
+
+
+# --------------------------------------------------------------------------
+# index
+# --------------------------------------------------------------------------
+def embed_pending(conn, embedder, hashes, model_name):
+    """Embed every pending chunk (keyed by distinct content_hash, not path —
+    identical content is only ever chunked/embedded once) in one batched
+    call. fastembed's internal batch_size (default 256) already chunks this
+    efficiently; calling embed() once per item instead of once for everything
+    re-pays ONNX session/thread-pool overhead per call and is dramatically
+    slower at scale."""
+    rows = []
+    batch = 500  # stay well under SQLite's default max-variables limit
+    for i in range(0, len(hashes), batch):
+        chunk_hashes = hashes[i : i + batch]
+        placeholders = ",".join("?" * len(chunk_hashes))
+        rows.extend(
+            conn.execute(
+                f"SELECT id, text FROM chunks WHERE content_hash IN ({placeholders}) ORDER BY id",
+                chunk_hashes,
+            ).fetchall()
+        )
+    if not rows:
+        return 0
+    ids = [r[0] for r in rows]
+    texts = [r[1] for r in rows]
+    vectors = embedder.embed(texts)  # generator, consumed lazily below
+    for n, (cid, vec) in enumerate(zip(ids, vectors), start=1):
+        conn.execute(
+            "UPDATE chunks SET embedding = ?, model = ? WHERE id = ?",
+            (vec.astype("float32").tobytes(), model_name, cid),
+        )
+        if n % 1000 == 0:
+            conn.commit()  # checkpoint progress on large corpora
+    return len(rows)
+
+
+def _hash_orphaned(conn, content_hash):
+    return conn.execute(
+        "SELECT 1 FROM documents WHERE hash = ? LIMIT 1", (content_hash,)
+    ).fetchone() is None
+
+
+def cmd_index(args):
+    db_path = resolve_db_path(args.db)
+    conn = open_db(db_path)
+    base_dir = os.path.realpath(args.base_dir)
+    if not os.path.isdir(base_dir):
+        sys.exit(f"error: {args.base_dir} is not a directory")
+
+    embedder, embed_note = None, ""
+    if not args.no_embed:
+        try:
+            embedder = load_embedder(args.model)
+        except EmbeddingUnavailable as e:
+            embed_note = str(e)
+
+    model_name = args.model or DEFAULT_MODEL
+    existing = {
+        row[0]: row
+        for row in conn.execute(
+            "SELECT path, size, mtime, hash FROM documents WHERE root = ?", (base_dir,)
+        )
+    }
+    seen = set()
+    added = updated = unchanged = 0
+    to_embed_hashes = set()
+
+    for path in walk_markdown(base_dir, include_archive=args.include_archive):
+        seen.add(path)
+        try:
+            st = os.stat(path)
+        except OSError:
+            continue
+        size, mtime = st.st_size, st.st_mtime
+        prev = existing.get(path)
+        if prev and prev[1] == size and abs(prev[2] - mtime) < 1e-6:
+            unchanged += 1
+            continue
+        try:
+            with open(path, "rb") as f:
+                raw = f.read()
+        except OSError:
+            continue
+        digest = hashlib.sha256(raw).hexdigest()
+        if prev and prev[3] == digest:
+            conn.execute("UPDATE documents SET mtime = ? WHERE path = ?", (mtime, path))
+            unchanged += 1
+            continue
+
+        text = raw.decode("utf-8", errors="replace")
+        title = extract_title(text, path)
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        prev_hash = prev[3] if prev else None
+        if prev:
+            updated += 1
+        else:
+            added += 1
+        conn.execute(
+            "INSERT INTO documents(path, root, size, mtime, hash, title, indexed_at) "
+            "VALUES (?,?,?,?,?,?,?) "
+            "ON CONFLICT(path) DO UPDATE SET size=excluded.size, mtime=excluded.mtime, "
+            "hash=excluded.hash, title=excluded.title, indexed_at=excluded.indexed_at",
+            (path, base_dir, size, mtime, digest, title, now),
+        )
+        # Dedup: chunks are keyed by content_hash, not path. If some other
+        # document (any path, any root, past or present in this run) already
+        # produced chunks for this exact content, reuse them — don't re-chunk
+        # or re-embed identical bytes. Chunking is what needs the actual text,
+        # so we still had to read the file to get here either way.
+        has_chunks = conn.execute(
+            "SELECT 1 FROM chunks WHERE content_hash = ? LIMIT 1", (digest,)
+        ).fetchone()
+        if not has_chunks:
+            for i, (ctext, sl, el) in enumerate(chunk_text(text)):
+                conn.execute(
+                    "INSERT OR IGNORE INTO chunks"
+                    "(content_hash, chunk_index, start_line, end_line, text) "
+                    "VALUES (?,?,?,?,?)",
+                    (digest, i, sl, el, ctext),
+                )
+        if embedder is not None:
+            already_embedded = conn.execute(
+                "SELECT 1 FROM chunks WHERE content_hash = ? AND embedding IS NOT NULL "
+                "AND model = ? LIMIT 1",
+                (digest, model_name),
+            ).fetchone()
+            if not already_embedded:
+                to_embed_hashes.add(digest)
+        # If this path's content changed away from a hash no longer referenced
+        # by any document, that hash's chunks are now dead weight — drop them.
+        if prev_hash and prev_hash != digest and _hash_orphaned(conn, prev_hash):
+            conn.execute("DELETE FROM chunks WHERE content_hash = ?", (prev_hash,))
+
+    removed = 0
+    for path in existing:
+        if path not in seen:
+            old_hash = existing[path][3]
+            conn.execute("DELETE FROM documents WHERE path = ?", (path,))
+            removed += 1
+            if _hash_orphaned(conn, old_hash):
+                conn.execute("DELETE FROM chunks WHERE content_hash = ?", (old_hash,))
+    conn.commit()
+
+    if embedder is not None:
+        # Catch up hashes that are content-unchanged (so the main loop above
+        # skipped their documents) but still lack an embedding for the
+        # current model — e.g. they were first indexed with --no-embed, or
+        # with a different --model. Without this, enabling embeddings later
+        # would silently never backfill anything already marked "unchanged".
+        catchup = conn.execute(
+            "SELECT DISTINCT d.hash FROM documents d JOIN chunks c ON c.content_hash = d.hash "
+            "WHERE d.root = ? AND (c.embedding IS NULL OR c.model IS NULL OR c.model != ?)",
+            (base_dir, model_name),
+        ).fetchall()
+        for (h,) in catchup:
+            to_embed_hashes.add(h)
+
+    to_embed_hashes = sorted(to_embed_hashes)
+    embedded_chunks = 0
+    if embedder is not None and to_embed_hashes:
+        embedded_chunks = embed_pending(conn, embedder, to_embed_hashes, model_name)
+        conn.commit()
+
+    print(f"root: {base_dir}")
+    print(f"db: {db_path}")
+    print(f"added={added} updated={updated} unchanged={unchanged} removed={removed}")
+    if embedder is not None:
+        print(
+            f"embedded {embedded_chunks} chunks across {len(to_embed_hashes)} "
+            f"distinct documents (model={model_name})"
+        )
+    else:
+        print(f"embeddings skipped: {embed_note or 'disabled (--no-embed)'}")
+    if not args.include_archive:
+        print("note: top-level archive/ excluded (--include-archive to include it)")
+    conn.close()
+
+
+# --------------------------------------------------------------------------
+# search (semantic, requires embeddings)
+# --------------------------------------------------------------------------
+def cmd_search(args):
+    db_path = resolve_db_path(args.db)
+    if not os.path.isfile(db_path):
+        sys.exit(f"error: no index at {db_path} — run 'doc-indexer index <dir>' first")
+    conn = open_db(db_path)
+
+    try:
+        embedder = load_embedder(args.model)
+    except EmbeddingUnavailable as e:
+        sys.exit(f"search unavailable: {e}")
+
+    rows = conn.execute(
+        "SELECT content_hash, start_line, end_line, text, embedding, model "
+        "FROM chunks WHERE embedding IS NOT NULL"
+    ).fetchall()
+    if not rows:
+        sys.exit(
+            "no embedded chunks in index — run 'doc-indexer index <dir>' "
+            "(with embeddings enabled) first"
+        )
+
+    import numpy as np
+
+    model_name = args.model or DEFAULT_MODEL
+    usable = [r for r in rows if r[5] == model_name]
+    if not usable:
+        print(
+            f"warning: indexed embeddings use a different model than "
+            f"'{model_name}'; re-index to refresh. Using them anyway.",
+            file=sys.stderr,
+        )
+        usable = rows
+
+    prefix = None
+    allowed_hashes = None
+    if args.dir:
+        prefix = os.path.realpath(args.dir)
+        allowed_hashes = {
+            h
+            for (h,) in conn.execute(
+                "SELECT DISTINCT hash FROM documents WHERE path = ? OR path LIKE ?",
+                (prefix, prefix + os.sep + "%"),
+            )
+        }
+        usable = [r for r in usable if r[0] in allowed_hashes]
+        if not usable:
+            sys.exit(f"no indexed documents under {prefix}")
+
+    mat = np.frombuffer(b"".join(r[4] for r in usable), dtype="float32").reshape(len(usable), -1)
+    norms = np.linalg.norm(mat, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    mat = mat / norms
+
+    qvec = next(iter(embedder.query_embed([args.query]))).astype("float32")
+    qn = np.linalg.norm(qvec)
+    if qn > 0:
+        qvec = qvec / qn
+
+    scores = mat @ qvec
+    # One result per distinct content hash — never let duplicate copies of
+    # the same file occupy multiple ranked slots.
+    best_per_hash = {}
+    for score, r in zip(scores, usable):
+        content_hash = r[0]
+        if content_hash not in best_per_hash or score > best_per_hash[content_hash][0]:
+            best_per_hash[content_hash] = (score, r)
+
+    ranked = sorted(best_per_hash.values(), key=lambda x: -x[0])[: args.top]
+    if not ranked:
+        print("no results")
+        return
+    for score, r in ranked:
+        content_hash, sl, el, text, _, _ = r
+        paths = sorted(
+            p for (p,) in conn.execute("SELECT path FROM documents WHERE hash = ?", (content_hash,))
+        )
+        canonical = paths[0]  # alphabetically first path sharing this content, deterministic
+        if prefix:
+            in_scope = [p for p in paths if p == prefix or p.startswith(prefix + os.sep)]
+            if in_scope:
+                canonical = in_scope[0]
+        dup_note = f"  (+{len(paths) - 1} identical copies)" if len(paths) > 1 else ""
+        excerpt = " ".join(text.split())[:220]
+        print(f"{score:.3f}  {canonical}:{sl}-{el}{dup_note}")
+        print(f"       {excerpt}")
+
+
+# --------------------------------------------------------------------------
+# find (literal text search, zero dependencies, no DB, no embeddings)
+# --------------------------------------------------------------------------
+def default_scope_dir():
+    d = os.getcwd()
+    for _ in range(12):
+        if os.path.isfile(os.path.join(d, "CONVENTIONS.md")):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    return os.getcwd()
+
+
+def cmd_find(args):
+    base_dir = os.path.realpath(args.dir or default_scope_dir())
+    if not os.path.isdir(base_dir):
+        sys.exit(f"error: {base_dir} is not a directory")
+    needle = args.text if args.case_sensitive else args.text.lower()
+    files_matched = 0
+    for path in walk_markdown(base_dir, include_archive=True):  # find is unaffected by index's archive default
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+        except OSError:
+            continue
+        hits = []
+        for i, line in enumerate(lines, start=1):
+            hay = line if args.case_sensitive else line.lower()
+            if needle in hay:
+                hits.append((i, line.strip()))
+        if hits:
+            print(path)
+            for i, line in hits[: args.max_per_file]:
+                print(f"  {i}: {line[:200]}")
+            if len(hits) > args.max_per_file:
+                print(f"  … {len(hits) - args.max_per_file} more match(es) in this file")
+            files_matched += 1
+            if args.max_files and files_matched >= args.max_files:
+                break
+    if not files_matched:
+        print("no matches")
+
+
+# --------------------------------------------------------------------------
+# CLI
+# --------------------------------------------------------------------------
+def main():
+    _reexec_into_venv()
+
+    p = argparse.ArgumentParser(
+        prog="doc-indexer",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    i = sub.add_parser("index", help="scan for markdown, embed, store in SQLite (incremental)")
+    i.add_argument("base_dir", help="directory to recursively scan")
+    i.add_argument("--db", help="SQLite DB path (default: %s or $DOC_INDEXER_DB)" % default_db_path())
+    i.add_argument("--no-embed", action="store_true", help="skip embedding (metadata/find only)")
+    i.add_argument("--model", help=f"embedding model name (default: {DEFAULT_MODEL})")
+    i.add_argument(
+        "--include-archive",
+        action="store_true",
+        help="also index a top-level archive/ directly under base-dir (excluded by default)",
+    )
+    i.set_defaults(fn=cmd_index)
+
+    s = sub.add_parser("search", help="semantic search over embeddings")
+    s.add_argument("query")
+    s.add_argument("--db", help="SQLite DB path")
+    s.add_argument("-n", "--top", type=int, default=8, help="max results (default: 8)")
+    s.add_argument("--dir", help="restrict results to this path prefix")
+    s.add_argument("--model", help=f"embedding model name (default: {DEFAULT_MODEL})")
+    s.set_defaults(fn=cmd_search)
+
+    f = sub.add_parser("find", help="literal/exact text search (no embeddings, no DB)")
+    f.add_argument("text")
+    f.add_argument("--dir", help="directory to search (default: nearest CONVENTIONS.md root, else cwd)")
+    f.add_argument("--case-sensitive", action="store_true")
+    f.add_argument("--max-files", type=int, default=0, help="stop after N matching files (0 = no cap)")
+    f.add_argument("--max-per-file", type=int, default=5, help="max matching lines shown per file")
+    f.set_defaults(fn=cmd_find)
+
+    args = p.parse_args()
+    args.fn(args)
+
+
+if __name__ == "__main__":
+    main()

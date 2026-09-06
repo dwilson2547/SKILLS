@@ -1,0 +1,4 @@
+# Optional embedding backend for `doc-indexer search`.
+# Installed into ./.venv by install-embeddings.sh — never required for
+# `index --no-embed` or `find`, which are pure stdlib.
+fastembed
