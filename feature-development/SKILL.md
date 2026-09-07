@@ -5,8 +5,8 @@ description: 'The default workflow for building, changing, or fixing code. Use f
 
 # Feature Development
 
-One workflow for implementation work. It does **not** assume the task is small — it finds out,
-from the code, and takes one of two paths.
+One workflow for implementation work. It does **not** assume the task is small — it establishes
+scope from the code first, and raises a hand before starting anything large.
 
 The bias is toward doing the work: no spec documents, no brainstorming phase, no validation theatre
 for a config change. Ceremony is earned by scope, not applied by default.
@@ -18,36 +18,27 @@ for a config change. Ceremony is earned by scope, not applied by default.
 Read the files the change touches. Then write down, explicitly, **the list of files you will
 modify or create**.
 
-Do not judge the size of the task before this step. A size estimate made from the request alone is
-a guess made with the least information you will ever have, and it is consistently wrong in the
-direction of "this is small."
+Do this before writing any code, and before forming a view on how big the task is. An estimate made
+from the request alone is a guess made with the least information you will ever have, and it is
+consistently wrong in the direction of "this is small." The list is also what step 4 checks the
+finished work against, so it has to be written down, not held in your head.
 
-## Step 2 — Gate on that list
+**If that list runs past a handful of files, or the change crosses a module, schema, or public
+interface boundary — say so and get agreement before writing code.** Name what makes it large and
+describe the approach in a few sentences. That is the whole escalation: a paragraph in the
+conversation, not a spec document and not subagents.
 
-Apply this to the list from step 1, not to your impression of the request:
+If you discover mid-implementation that this applies, stop and raise it then. That is not a
+failure; continuing quietly is.
 
-**Direct path** — all of the following are true:
-- 5 or fewer files
-- no new module, service, or package boundary
-- no change to a schema, API contract, or public interface others depend on
-- no dependency added
-
-**Escalate** — any one of them is false. Escalating means: state the file count, name which
-condition failed, describe the approach in a few sentences, and get agreement before writing code.
-It does **not** mean writing a spec document or spawning subagents. A paragraph in the conversation
-is the deliverable.
-
-If you discover mid-implementation that the gate should have failed, stop and escalate then. That
-is not a failure; continuing quietly is.
-
-## Step 3 — Implement
+## Step 2 — Implement
 
 Write the code directly. No intermediate documents, no staging work in notes or handoff docs.
 
 Do the work yourself. Delegating to a subagent costs a cold start and re-derivation of context you
 already hold — only worth it for genuinely independent, parallelisable work.
 
-## Step 4 — Verify what the change touches
+## Step 3 — Verify what the change touches
 
 Run the check that actually exercises the change: tests, a build, a smoke test, or driving the app.
 
@@ -56,14 +47,14 @@ checking that the new code works while never checking what it sits next to — t
 sibling config, the hook it shadows, the integration it feeds. Name explicitly what you verified
 and what you did not.
 
-## Step 5 — Completion checklist
+## Step 4 — Completion checklist
 
 Do not report the task complete until every line below is true. State each one:
 
 1. **Every file in the step-1 list** is either modified as intended, or explicitly named as dropped
    and why.
-2. **The step-4 check ran**, and you can name it and its actual result — not "should work."
-3. **Nothing beyond the gate crept in.** If the change grew past the step-2 conditions, say so.
+2. **The step-3 check ran**, and you can name it and its actual result — not "should work."
+3. **Nothing crept in beyond what step 1 scoped.** If the change grew, say so.
 4. **The working tree is committed** (CONVENTIONS.md §9 — commit even if unfinished; a WIP commit
    beats a dirty tree) and pushed.
 5. **Documentation closure**, where it applies:
@@ -74,4 +65,4 @@ Do not report the task complete until every line below is true. State each one:
      is approached.
 6. **State what you did not do** — untested paths, deferred cases, assumptions made.
 
-A single focused edit with no debugging and no surprises can skip 5, and only 5.
+A single focused edit with no debugging and no surprises can skip item 5, and only item 5.
