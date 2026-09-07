@@ -1,6 +1,6 @@
 ---
 name: handoff-document
-description: 'Write a handoff document when context is running low and work is incomplete, or when explicitly requested. Never include code — pass file paths only.'
+description: 'Write a handoff document when incomplete work is being passed to someone else — stopping for the day, switching machines, or handing to another person or session. Use when explicitly asked for a handoff. Never include code — pass file paths only. Do NOT use this to pre-empt running out of context: the harness summarises and carries context forward on its own, so ending a session early for that reason wastes the work in progress.'
 ---
 
 # Handoff Document
@@ -31,6 +31,13 @@ Write the handoff to `docs/handoff-<feature-name>.md` in the project root.
 ## Suggested Starting Point
 - Where the next session should begin: file path, function name, or step.
 ```
+
+## When NOT to write one
+
+Not because context is filling up. Long conversations are summarised and carried into the next
+window automatically, so stopping to hand off mid-task ends a session that had no need to end. Write
+one when the work is genuinely changing hands — a different day, a different machine, a different
+person — not to pre-empt a limit the harness already handles.
 
 ## Rules
 
