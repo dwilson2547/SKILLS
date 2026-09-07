@@ -1,6 +1,6 @@
 ---
 name: feature-development
-description: 'The default workflow for building, changing, or fixing code. Use for any implementation request — a bug fix, a config change, adding a field or endpoint, a refactor, or a new component. Determines scope from the code itself rather than from the request, then either executes directly or escalates for agreement first. Trigger phrases: build, implement, add, fix, change, update, refactor, wire up, make it do X.'
+description: 'The default workflow for building, changing, or fixing code. Use for any implementation request — a bug fix, a config change, adding a field or endpoint, a refactor, or a new component. Determines scope from the code itself rather than from the request, then either executes directly or escalates for agreement first. Trigger phrases: build, implement, add, fix, change, update, refactor, wire up, make it do X. Defer to a domain skill when one fits: ui-development or ui-repair-loop for UI work, dockerfile-creation or docker-compose-creation for containers, alembic-migrations for schema migrations, scraper-development-skill for scrapers. Use this when no domain skill applies.'
 ---
 
 # Feature Development

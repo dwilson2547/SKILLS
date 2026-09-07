@@ -1,6 +1,6 @@
 ---
 name: docker-compose-creation
-description: 'Create, fix, or improve docker-compose files. Use when writing a new docker-compose.yml, debugging compose startup failures, or adding services to an existing stack. Checks for port conflicts, confirms port changes with the user, prefers local storage paths over named volumes (asks when data is disposable), and verifies the stack starts successfully before declaring done. Also generates a concise README with start/stop/restart/rebuild commands.'
+description: 'Create, fix, or improve docker-compose files. Use when writing a new docker-compose.yml, debugging compose startup failures, or adding services to an existing stack. Checks for port conflicts, confirms port changes with the user, prefers local storage paths over named volumes (asks when data is disposable), and verifies the stack starts successfully before declaring done. Also generates a concise README with start/stop/restart/rebuild commands. For authoring the Dockerfiles a stack builds from, use dockerfile-creation.'
 ---
 
 # Docker Compose Creation

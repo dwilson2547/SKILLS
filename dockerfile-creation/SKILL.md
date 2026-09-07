@@ -1,6 +1,6 @@
 ---
 name: dockerfile-creation
-description: 'Create, fix, or improve Dockerfiles. Use when writing a new Dockerfile, debugging a failed docker build, or improving an existing image. Ensures the image actually builds and runs before declaring it complete.'
+description: 'Create, fix, or improve Dockerfiles. Use when writing a new Dockerfile, debugging a failed docker build, or improving an existing image. Ensures the image actually builds and runs before declaring it complete. For the compose file that orchestrates images, use docker-compose-creation.'
 ---
 
 # Dockerfile Creation

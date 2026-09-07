@@ -1,19 +1,12 @@
 ---
 name: web-scraper
 description: >
-  Build production-quality web scrapers by first using Playwright MCP to investigate a target site's
-  structure, then selecting the right extraction strategy, then generating robust scraper code.
-  Use this skill whenever the user wants to extract structured data from a website, scrape a URL,
-  pull data from web pages, automate data collection from the web, or asks how to get data out of
-  a site. Trigger even if the user just asks "how do I scrape X" or "can you get me the data from
-  this page" — the investigation phase is always the right starting point, even for seemingly simple sites.
-  This skill requires the Playwright MCP to be connected.
-
-  Generated scrapers must: (1) use scrape-stack clients by default, (2) check the webcache before
-  every target-site fetch, (3) route media through the scrape-stack cache layers, and (4) use
-  request_auth_client permits around target-site requests so central rate limiting is observed.
-  Cache-service calls stay outside permits, and scrapers should not implement competing local
-  backoff logic. See references/ for the full doctrine on each.
+  Build production-quality web scrapers: investigate the target site with Playwright MCP first,
+  then choose an extraction strategy, then generate the scraper. Use whenever the user wants to
+  extract structured data from a website, scrape a URL, pull data from a page, or asks how to get
+  data out of a site — the investigation phase is the right start even for seemingly simple sites.
+  Requires the Playwright MCP. Scrape-stack doctrine (caching, permits, rate limiting) is in the
+  skill body and references/, not here.
 ---
 
 # Web Scraper Development Skill
