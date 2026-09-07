@@ -1,5 +1,5 @@
 ---
-name: web-scraper
+name: scraper-development-skill
 description: >
   Build production-quality web scrapers: investigate the target site with Playwright MCP first,
   then choose an extraction strategy, then generate the scraper. Use whenever the user wants to
