@@ -10,7 +10,9 @@ the workspace root** — read it when a placement/structure question is non-obvi
 the short, always-applied behavioral layer on top of it.
 
 > Portable on purpose: this skill plus the root `CLAUDE.md`/`AGENTS.md` travel with the workspace
-> repo, so any agent on any clone inherits these rules without machine-specific setup.
+> repo, so any agent on any clone inherits these rules. Two things cannot travel, because they live
+> in `.git/config` and `~/`: the pre-commit guards and the skill symlinks. `CLAUDE.md` carries the
+> check-and-install snippet; `SUBMODULES.md` has the detail.
 
 ---
 
