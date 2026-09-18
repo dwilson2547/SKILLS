@@ -8,7 +8,7 @@ search. No server, no daemon, no HTTP API. SQLite on disk. See README.md.
 
 Usage:
   doc-indexer index <base-dir> [--db PATH] [--no-embed] [--model NAME] [--include-archive]
-  doc-indexer search <query> [--db PATH] [-n N] [--dir PREFIX] [--model NAME]
+  doc-indexer search <query> [--db PATH] [-n N] [--dir PREFIX] [--model NAME] [--include-superseded]
   doc-indexer find <text> [--dir PATH] [--case-sensitive] [--max-files N]
 
 Output is terse and always includes the document path so an agent can judge
@@ -20,6 +20,13 @@ domain relevance from the path itself.
 hash: identical files are chunked/embedded once, but every path is still
 tracked so `find` reports every location. `search` shows one row per distinct
 content, with a canonical path and a count of other copies.
+
+`index` also reads a document's status from its header (`**Status:** …`,
+`Status: …`, or frontmatter `status:` within the first 20 lines — the form the
+`docs/decisions/` records use). `search` prints it on the hit line as
+`[status]` and drops documents whose status starts with "superseded" unless
+--include-superseded is given, so a retired decision never outranks the one
+that replaced it (docs/decisions/0003-superseded-status.md).
 """
 import argparse
 import datetime
@@ -44,6 +51,7 @@ CREATE TABLE IF NOT EXISTS documents (
     mtime REAL NOT NULL,
     hash TEXT NOT NULL,
     title TEXT,
+    status TEXT,
     indexed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_documents_hash ON documents(hash);
@@ -134,6 +142,14 @@ def _migrate_if_needed(conn):
         conn.executescript("DROP TABLE IF EXISTS chunks; DROP TABLE IF EXISTS documents;")
         conn.commit()
         conn.execute("VACUUM")  # reclaim the dropped tables' pages immediately
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(documents)")}
+    if cols and "status" not in cols:
+        # status is read from file content, so every existing row must be read
+        # once more. Zeroing size defeats the size/mtime fast path; the hash
+        # still matches, so nothing is re-chunked or re-embedded.
+        conn.execute("ALTER TABLE documents ADD COLUMN status TEXT")
+        conn.execute("UPDATE documents SET size = -1")
+        conn.commit()
 
 
 def open_db(path):
@@ -222,6 +238,24 @@ def extract_title(text, path):
         if m:
             return m.group(1).strip()
     return os.path.splitext(os.path.basename(path))[0]
+
+
+_STATUS_RE = re.compile(r"^\s*(?:\*\*|__)?status(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(.+?)\s*$", re.I)
+
+
+def extract_status(text):
+    """First `Status:` line in the header, or None. Matches `**Status:** accepted`,
+    `Status: superseded by 0004`, and frontmatter `status: rejected`. Only the
+    first field of a ` · `-separated header line is taken, so
+    `**Status:** accepted · **Date:** 2026-06-14` yields `accepted`. A value
+    longer than 40 chars is a project-status sentence, not a state — ignored."""
+    for line in text.splitlines()[:20]:
+        m = _STATUS_RE.match(line)
+        if m:
+            value = re.split(r"\s+[·|]\s+", m.group(1))[0]
+            value = re.sub(r"[*_`]+", "", value).strip().rstrip(".").lower()
+            return value if 0 < len(value) <= 40 else None
+    return None
 
 
 def chunk_text(text):
@@ -356,12 +390,16 @@ def cmd_index(args):
         except OSError:
             continue
         digest = hashlib.sha256(raw).hexdigest()
+        text = raw.decode("utf-8", errors="replace")
+        status = extract_status(text)
         if prev and prev[3] == digest:
-            conn.execute("UPDATE documents SET mtime = ? WHERE path = ?", (mtime, path))
+            conn.execute(
+                "UPDATE documents SET size = ?, mtime = ?, status = ? WHERE path = ?",
+                (size, mtime, status, path),
+            )
             unchanged += 1
             continue
 
-        text = raw.decode("utf-8", errors="replace")
         title = extract_title(text, path)
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         prev_hash = prev[3] if prev else None
@@ -370,11 +408,12 @@ def cmd_index(args):
         else:
             added += 1
         conn.execute(
-            "INSERT INTO documents(path, root, size, mtime, hash, title, indexed_at) "
-            "VALUES (?,?,?,?,?,?,?) "
+            "INSERT INTO documents(path, root, size, mtime, hash, title, status, indexed_at) "
+            "VALUES (?,?,?,?,?,?,?,?) "
             "ON CONFLICT(path) DO UPDATE SET size=excluded.size, mtime=excluded.mtime, "
-            "hash=excluded.hash, title=excluded.title, indexed_at=excluded.indexed_at",
-            (path, base_dir, size, mtime, digest, title, now),
+            "hash=excluded.hash, title=excluded.title, status=excluded.status, "
+            "indexed_at=excluded.indexed_at",
+            (path, base_dir, size, mtime, digest, title, status, now),
         )
         # Dedup: chunks are keyed by content_hash, not path. If some other
         # document (any path, any root, past or present in this run) already
@@ -413,6 +452,12 @@ def cmd_index(args):
             removed += 1
             if _hash_orphaned(conn, old_hash):
                 conn.execute("DELETE FROM chunks WHERE content_hash = ?", (old_hash,))
+    # Sweep: chunks whose hash no document references any more (left behind by
+    # an interrupted run, or by the pre-dedup schema) would otherwise surface
+    # in search with no path to print.
+    conn.execute(
+        "DELETE FROM chunks WHERE content_hash NOT IN (SELECT DISTINCT hash FROM documents)"
+    )
     conn.commit()
 
     if embedder is not None:
@@ -486,6 +531,10 @@ def cmd_search(args):
         )
         usable = rows
 
+    # Defensive: a chunk with no document row has no path to print.
+    live = {h for (h,) in conn.execute("SELECT DISTINCT hash FROM documents")}
+    usable = [r for r in usable if r[0] in live]
+
     prefix = None
     allowed_hashes = None
     if args.dir:
@@ -500,6 +549,17 @@ def cmd_search(args):
         usable = [r for r in usable if r[0] in allowed_hashes]
         if not usable:
             sys.exit(f"no indexed documents under {prefix}")
+
+    # Status is per document; content dedup means every path sharing a hash
+    # shares a header, so a hash-level lookup is exact.
+    status_by_hash = dict(
+        conn.execute("SELECT hash, status FROM documents WHERE status IS NOT NULL")
+    )
+    if not args.include_superseded:
+        superseded = {h for h, st in status_by_hash.items() if st.startswith("superseded")}
+        usable = [r for r in usable if r[0] not in superseded]
+        if not usable:
+            sys.exit("every candidate document is superseded — pass --include-superseded")
 
     mat = np.frombuffer(b"".join(r[4] for r in usable), dtype="float32").reshape(len(usable), -1)
     norms = np.linalg.norm(mat, axis=1, keepdims=True)
@@ -535,8 +595,10 @@ def cmd_search(args):
             if in_scope:
                 canonical = in_scope[0]
         dup_note = f"  (+{len(paths) - 1} identical copies)" if len(paths) > 1 else ""
+        status = status_by_hash.get(content_hash)
+        status_tag = f"[{status}] " if status else ""
         excerpt = " ".join(text.split())[:220]
-        print(f"{score:.3f}  {canonical}:{sl}-{el}{dup_note}")
+        print(f"{score:.3f}  {status_tag}{canonical}:{sl}-{el}{dup_note}")
         print(f"       {excerpt}")
 
 
@@ -616,6 +678,11 @@ def main():
     s.add_argument("-n", "--top", type=int, default=8, help="max results (default: 8)")
     s.add_argument("--dir", help="restrict results to this path prefix")
     s.add_argument("--model", help=f"embedding model name (default: {DEFAULT_MODEL})")
+    s.add_argument(
+        "--include-superseded",
+        action="store_true",
+        help="also return documents whose header status starts with 'superseded' (dropped by default)",
+    )
     s.set_defaults(fn=cmd_search)
 
     f = sub.add_parser("find", help="literal/exact text search (no embeddings, no DB)")

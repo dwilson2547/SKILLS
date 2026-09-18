@@ -58,6 +58,10 @@ N other paths; the one shown is canonical.
 A top-level `archive/` is **excluded by default** — it holds superseded material (§4). Pass
 `--include-archive` only when deliberately digging through dead history.
 
+A `[status]` tag before the path is the document's own `Status:` header (decision records carry
+one). Documents marked `superseded by …` are **dropped by default**; pass `--include-superseded`
+when tracing why a decision changed.
+
 ## Keeping it current
 
 ```bash

@@ -100,7 +100,14 @@ Format: `<score>  <path>:<start_line>-<end_line>` (plus `(+N identical copies)` 
 is duplicated elsewhere) then an indented excerpt line. The shown path is a deterministic
 canonical choice (alphabetically first among duplicates; one inside `--dir` if that's given) — use
 `find` if you need the full list of paths sharing that content. Flags: `--db PATH`, `-n/--top N`
-(default 8), `--dir PREFIX` (restrict to a path prefix, e.g. a single domain), `--model NAME`.
+(default 8), `--dir PREFIX` (restrict to a path prefix, e.g. a single domain), `--model NAME`,
+`--include-superseded`.
+
+A document with a `Status:` header line (the `docs/decisions/` convention: `**Status:** accepted ·
+**Date:** …`) shows it on the hit line as `[accepted]`, and documents whose status starts with
+`superseded` are **dropped by default** so a retired decision never ranks beside the one that
+replaced it. `--include-superseded` brings them back. See
+`docs/decisions/0003-superseded-status.md`.
 
 If no embeddings exist yet (fastembed never installed, or `index` was run with `--no-embed`),
 `search` exits immediately with the exact reason and the command to fix it — it never crashes into
