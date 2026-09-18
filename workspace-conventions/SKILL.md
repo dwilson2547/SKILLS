@@ -84,6 +84,16 @@ do **not** save it. When saving:
 This deliberately replaces freeform "is this worth saving?" judgment (which oscillates between
 noisy and silent) with a structural gate keyed to the closed domain taxonomy.
 
+## Factual provenance (§10)
+
+Docs state what is *known*, never what is *plausible*. Every specific value — port, channel,
+parameter, part number — is verified, planned, or explicitly `⚠ unverified`. Never invent a value
+to complete a table or an answer: an unknown marked as unknown is useful, an invented value
+actively misdirects every future session that reads it. Never upgrade a claim's status without a
+measurement, a config dump, or the user's word. When a table drives action (wiring, channels,
+params), it carries a `✅ verified / ⬜ planned` status column, and you do not configure against a
+⬜ row without eyes on the hardware first.
+
 ## Commits (§9)
 
 Commit early, often, and broken — a commit is a checkpoint, not a certificate that something works.
