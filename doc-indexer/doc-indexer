@@ -249,13 +249,23 @@ def extract_status(text):
     first field of a ` · `-separated header line is taken, so
     `**Status:** accepted · **Date:** 2026-06-14` yields `accepted`. A value
     longer than 40 chars is a project-status sentence, not a state — ignored."""
-    for line in text.splitlines()[:20]:
+    head = text.splitlines()[:20]
+    value = None
+    for line in head:
         m = _STATUS_RE.match(line)
         if m:
             value = re.split(r"\s+[·|]\s+", m.group(1))[0]
             value = re.sub(r"[*_`]+", "", value).strip().rstrip(".").lower()
-            return value if 0 < len(value) <= 40 else None
-    return None
+            break
+    if not value or len(value) > 40:
+        return None
+    if value == "superseded":
+        # frontmatter keeps the pointer in its own field; fold it into the tag
+        for line in head:
+            m = re.match(r"^\s*superseded_by\s*:\s*(\S+)", line, re.I)
+            if m:
+                return f"superseded by {m.group(1)}"
+    return value
 
 
 def chunk_text(text):

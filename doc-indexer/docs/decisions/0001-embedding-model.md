@@ -1,6 +1,10 @@
-# Decision: embedding model is `sentence-transformers/all-MiniLM-L6-v2`, not `BAAI/bge-small-en-v1.5`
+---
+kind: decision
+status: accepted
+date: 2026-09-06T17:39:26-04:00
+---
 
-**Status:** accepted · **Date:** 2026-09-06
+# Decision: embedding model is `sentence-transformers/all-MiniLM-L6-v2`, not `BAAI/bge-small-en-v1.5`
 
 ## Context
 

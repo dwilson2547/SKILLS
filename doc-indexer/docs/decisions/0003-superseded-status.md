@@ -1,6 +1,11 @@
-# 0003 — Read a document's `Status:` header; drop superseded documents from `search` by default
+---
+kind: decision
+status: accepted
+date: 2026-09-17T23:38:52-04:00
+depends_on: [0002]
+---
 
-**Status:** accepted · **Date:** 2026-09-17
+# 0003 — Read a document's `Status:` header; drop superseded documents from `search` by default
 
 ## Context
 

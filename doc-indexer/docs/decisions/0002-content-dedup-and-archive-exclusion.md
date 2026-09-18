@@ -1,6 +1,10 @@
-# Decision: dedup embeddings by content hash; exclude top-level `archive/` by default
+---
+kind: decision
+status: accepted
+date: 2026-09-06T17:39:26-04:00
+---
 
-**Status:** accepted · **Date:** 2026-09-06
+# Decision: dedup embeddings by content hash; exclude top-level `archive/` by default
 
 ## Context
 
