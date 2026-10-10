@@ -118,6 +118,22 @@ After pushing both repos, refresh the relevant ArgoCD apps and verify each chang
 
 ---
 
+## Publishing a Service on the Internet (danwils.com)
+
+Only when the user explicitly wants a service public. Internal (`.local`) is the default and needs
+none of this. On the service's Ingress:
+
+- host `<name>.danwils.com`; `tls:` block with that host and a secret name
+- annotation `cert-manager.io/cluster-issuer: letsencrypt-prod`
+- annotation `traefik.ingress.kubernetes.io/router.entrypoints: pubsecure` (public Traefik, 192.168.0.65;
+  without it the Ingress is LAN-only)
+- label `dns.danwils.com/public: "true"` and annotation `external-dns.alpha.kubernetes.io/target: danwils.com`
+  — external-dns then creates the proxied Cloudflare CNAME itself. Agents never handle a Cloudflare token
+  and never create records by hand.
+
+Then add it to `infra/cluster-config/homepage-public/` (link by its danwils.com URL). Ask before publishing
+anything without its own authentication. See `infra/cluster-config/CLAUDE.md` → "Public vs internal ingress".
+
 ## DNS Changes
 
 Edit `infra/cluster-config/dns/dns.yaml` (CoreDNS ConfigMap zone file), bump the serial number, commit and push. The `coredns-local` Deployment is annotated with `configmap.reloader.stakater.com/reload: coredns-local-config`, so Stakater Reloader should roll CoreDNS automatically when ArgoCD applies the updated ConfigMap. Only fall back to a manual `kubectl rollout restart deployment/coredns-local -n dns` if reloader is unavailable or the rollout does not happen.
