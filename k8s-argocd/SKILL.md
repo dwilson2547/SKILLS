@@ -127,7 +127,7 @@ none of this. On the service's Ingress:
 - annotation `cert-manager.io/cluster-issuer: letsencrypt-prod`
 - annotation `traefik.ingress.kubernetes.io/router.entrypoints: pubsecure` (public Traefik, 192.168.0.65;
   without it the Ingress is LAN-only)
-- label `dns.danwils.com/public: "true"` and annotation `external-dns.alpha.kubernetes.io/target: danwils.com`
+- label `dns.danwils.com/public: "true"` and annotation `external-dns.kubernetes.io/target: danwils.com` (not the legacy `external-dns.alpha.` prefix, which v0.23 ignores)
   — external-dns then creates the proxied Cloudflare CNAME itself. Agents never handle a Cloudflare token
   and never create records by hand.
 
