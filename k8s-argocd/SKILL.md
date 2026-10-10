@@ -143,7 +143,8 @@ Edit `infra/cluster-config/dns/dns.yaml` (CoreDNS ConfigMap zone file), bump the
 | `admin.gyopart.local` | admin API |
 | `inventory.gyopart.local` | inventory API |
 | `gyopart-dev.local` | gyopart-dev UI (dev equivalents follow this pattern) |
-| `argocd.local` | ArgoCD UI |
+| `argocd.local` | ArgoCD UI (LAN; SSO or local admin break-glass) |
+| `argocd.danwils.com` | ArgoCD UI (public, authentik SSO only; layout in `infra/cluster-config/docs/argocd_access.md`) |
 | `notes.ai-services.local` | AI Notes |
 | `context-store.ai-services.local` | Context Store |
 | `docs.ai-services.local` | AI Tool Docs |
