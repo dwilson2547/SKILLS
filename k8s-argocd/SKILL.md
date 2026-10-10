@@ -17,7 +17,7 @@ For Kubernetes work in this workspace, check `infra/cluster-config/CLAUDE.md` fi
 - scrape-stack (webcache, imgcache, request-auth, browserless, etc.)
 - DanWiki, Photo-Dump, and similar future systems
 
-These have their own git repo, their own Helm chart, and a `main`/`dev` branch strategy for prod vs dev. ArgoCD app manifests live either in the system's repo or in `infra/cluster-config` — check the existing pattern for each system.
+These have their own git repo, their own Helm chart, and a `main`/`dev` branch strategy for prod vs dev. Their ArgoCD Application manifests always live in `infra/cluster-config/argocd/`.
 
 **`infra/cluster-config` manifests** — everything else:
 - Core infrastructure: postgres, monitoring, DNS, ingress
@@ -52,24 +52,21 @@ These repos manage their own Helm charts and use a branch strategy for environme
 
 | App | Repo | Branch | Namespace | Domain | Values |
 |---|---|---|---|---|---|
-| gyopart | `workspace/automotive/gyopart` | `main` | `gyopart` | `gyopart.local` | `values.yaml` |
 | gyopart-dev | `workspace/automotive/gyopart` | `dev` | `gyopart-dev` | `gyopart-dev.local` | `values-dev.yaml` |
 | scrape-stack | `workspace/web-scrapers/scrape-stack` | `main` | `scrape-stack` | `scrapestack.local` | `values.yaml` |
-| scrape-stack-dev | `workspace/web-scrapers/scrape-stack` | `dev` | `scrape-stack-dev` | `scrapestack-dev.local` | `values-dev.yaml` |
+| scrape-stack-dev | `workspace/web-scrapers/scrape-stack` | `dev` | `scrapestack-dev` | `scrapestack-dev.local` | `values-dev.yaml` |
 | danwiki | `workspace/ai/dan-wiki` | `main` | `danwiki` | `danwiki.local` | `values.yaml` |
-| danwiki-dev | `workspace/ai/dan-wiki` | `dev` | `danwiki-dev` | `danwiki-dev.local` | `values.yaml` + `values-dev.yaml` |
-| photo-dump | `workspace/media/photo-dump` | `main` | `photo-dump` | — | `values.yaml` |
 | photo-dump-dev | `workspace/media/photo-dump` | `dev` | `photo-dump-dev` | — | `values-dev.yaml` |
 | robo-services | `workspace/robotics/robo-services` | `main` | `robo-services` | `*.robo-services.local` | `helm/robo-services/values.yaml` |
 
 **To update:** edit Helm chart or values → commit → push to the appropriate branch.
 
 **Scrape-stack** services: browserless, request-auth-server/api/ui, webcache, imgcache, filecache, vidcache, cache-browser-api/ui.
-Helm: `helm/scrape-stack/`. ArgoCD manifests live in the scrape-stack repo at `argocd/scrape-stack.yaml` + `argocd/scrape-stack-dev.yaml` — apply manually when changed.
+Helm: `helm/scrape-stack/`. ArgoCD manifests: `infra/cluster-config/argocd/scrape-stack.yaml` + `scrape-stack-dev.yaml`.
 Image updates: dev uses `imagePullPolicy: Always` (push → auto-rollout on next sync); prod requires an explicit tag bump in `values.yaml`.
 
 **Gyopart** services: gyopart-api (:8200), gyopart-ui (:80), inventory-api (:8100), admin-api (:8300).
-Helm: `gyopart/helm/gyopart/`. ArgoCD manifests: `infra/cluster-config/argocd/gyopart.yaml` + `gyopart-dev.yaml`.
+Helm: `gyopart/helm/gyopart/`. ArgoCD manifest: `infra/cluster-config/argocd/gyopart-dev.yaml` (no prod app).
 Always build/push from the gyopart root: `docker compose build <service> && docker compose push <service>`.
 After pushing: `kubectl rollout restart deployment/<name> -n gyopart-dev`.
 
@@ -84,16 +81,13 @@ kubectl apply -f <service>/secret.yml
 Templates in `infra/cluster-config/example-secrets/` and per-service `secret.yml` files. Fill in real values, never commit them.
 
 ### ArgoCD Application manifests
-Every time an `argocd/*.yaml` file changes, it must **also** be applied manually — ArgoCD does not manage its own Application CRs:
-```bash
-kubectl apply -f /home/daniel/documents/workspace/infra/cluster-config/argocd/<service>.yaml
-```
-For gyopart specifically:
-```bash
-kubectl apply -f /home/daniel/documents/workspace/infra/cluster-config/argocd/gyopart-dev.yaml
-kubectl apply -f /home/daniel/documents/workspace/infra/cluster-config/argocd/gyopart.yaml
-```
-Git push alone is not enough for these files.
+**Every** Application lives in `infra/cluster-config/argocd/`, including those whose Helm chart is in
+another repo. Never put Application manifests in an app repo. `argocd/` is synced by the app-of-apps
+root `infra/cluster-config/bootstrap/apps.yaml`, so adding or editing an Application is just a git push.
+Only the root itself is applied by hand (`kubectl apply -f bootstrap/apps.yaml`, once or after editing it).
+
+The root has `prune: false`: deleting a file from `argocd/` does not remove the Application. Also run
+`kubectl delete application <name> -n argocd` (no resources-finalizer, so workloads are orphaned).
 
 ---
 
@@ -101,7 +95,7 @@ Git push alone is not enough for these files.
 
 1. Create `infra/cluster-config/<service-name>/` with manifests
 2. Add `infra/cluster-config/argocd/<service-name>.yaml` pointing at `path: <service-name>`
-3. Apply the ArgoCD app manually: `kubectl apply -f argocd/<service-name>.yaml`
+3. Push — the root app registers it
 4. Create namespace and apply secrets if needed
 5. Push to `main` for all subsequent changes
 
@@ -161,7 +155,7 @@ Edit `infra/cluster-config/dns/dns.yaml` (CoreDNS ConfigMap zone file), bump the
 
 - Never `kubectl apply` for ArgoCD-managed resources — git push is the deployment mechanism
 - Never commit secrets — apply them manually
-- ArgoCD Application manifests (`argocd/*.yaml`) require both a git push AND a manual `kubectl apply`
+- ArgoCD Application manifests all live in `infra/cluster-config/argocd/` and deploy via git push (app-of-apps); only `bootstrap/apps.yaml` is applied by hand
 - The `infra/cluster-config/kubernetes/` directory is legacy/archive — not actively synced by ArgoCD
 - Do not run `kubectl apply` against the gyopart Helm chart — ArgoCD owns it
 
