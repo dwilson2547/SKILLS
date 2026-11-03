@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Windows adb.exe wrapper for driving a phone over wireless debugging from WSL.
+# See SKILL.md. `pair` and `connect` take different ports: a port that came with a
+# pairing code is ONLY ever given to `pair`.
+set -euo pipefail
+
+ADB=${ADB_EXE:-/mnt/c/Users/dwils/android-platform-tools/platform-tools/adb.exe}
+STAGE_WIN='C:\Users\dwils\android-platform-tools'
+STAGE_WSL=/mnt/c/Users/dwils/android-platform-tools
+
+die() { echo "adb-phone: $*" >&2; exit 1; }
+
+# the one connected device, or $ANDROID_SERIAL
+serial() {
+  if [[ -n "${ANDROID_SERIAL:-}" ]]; then echo "$ANDROID_SERIAL"; return; fi
+  local devs
+  devs=$("$ADB" devices | tr -d '\r' | awk 'NR>1 && $2=="device" {print $1}')
+  [[ -n "$devs" ]] || die "no device in 'device' state; run: adb-phone status"
+  [[ $(wc -l <<<"$devs") -eq 1 ]] || die "several devices, set ANDROID_SERIAL: $devs"
+  echo "$devs"
+}
+a() { "$ADB" -s "$(serial)" "$@"; }
+
+cmd=${1:-}; shift || true
+case "$cmd" in
+  status)
+    "$ADB" devices -l; "$ADB" mdns services ;;
+  pair)
+    [[ $# -eq 2 && $2 =~ ^[0-9]{6}$ ]] || die "usage: pair <ip:pairing-port> <6-digit code>"
+    timeout 30 "$ADB" pair "$1" "$2"
+    sleep 2; "$ADB" devices -l
+    echo "If no device is listed, ask for the IP:port on the main Wireless debugging screen and run: adb-phone connect <ip:port>" ;;
+  connect)
+    [[ $# -eq 1 ]] || die "usage: connect <ip:connect-port>  (never a port that came with a pairing code)"
+    out=$(timeout 15 "$ADB" connect "$1" 2>&1 | tr -d '\r') || true
+    echo "$out"
+    if grep -q 'protocol fault' <<<"$out"; then
+      "$ADB" disconnect "$1" >/dev/null 2>&1 || true
+      die "that is probably the PAIRING port; its pairing session is now likely spent. Ask the user for a fresh pairing code, or for the main-screen connect port."
+    fi
+    grep -q '^connected to\|already connected' <<<"$out" || exit 1
+    "$ADB" devices -l ;;
+  disconnect)
+    "$ADB" disconnect "${1:-}" ;;
+  install)
+    [[ $# -eq 1 && -f $1 ]] || die "usage: install <apk>"
+    name="agent-$(basename "$1")"
+    cp "$1" "$STAGE_WSL/$name"
+    a install -r "$STAGE_WIN\\$name" ;;
+  start)
+    [[ $# -eq 1 ]] || die "usage: start <package/.Activity>"
+    a shell am start -n "$1" ;;
+  stop)
+    a shell am force-stop "$1" ;;
+  log)
+    [[ $# -ge 1 ]] || die "usage: log <package> [lines]"
+    pid=$(a shell pidof "$1" | tr -d '\r')
+    [[ -n "$pid" ]] || die "$1 is not running"
+    a logcat -d --pid="$pid" \
+      | grep -viE 'Choreographer|hwui|VRI\[|ViewRoot|InsetsController|InsetsSource|SurfaceView|BLASTBuffer|libpenguin' \
+      | tail -n "${2:-40}" ;;
+  shot)
+    [[ $# -eq 1 ]] || die "usage: shot <out.png>"
+    a exec-out screencap -p >"$1"; echo "$1" ;;
+  tap)
+    [[ $# -eq 2 ]] || die "usage: tap <x> <y>  (device pixels; scale up from the screenshot as shown)"
+    a shell input tap "$1" "$2" ;;
+  shell)
+    a shell "$@" ;;
+  *)
+    die "usage: adb-phone status|pair|connect|disconnect|install|start|stop|log|shot|tap|shell" ;;
+esac
