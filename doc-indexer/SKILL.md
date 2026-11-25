@@ -55,6 +55,12 @@ hit is about before you open it. Prefer opening the path over trusting the excer
 `search` shows one row per distinct content. `(+N identical copies)` means the same file exists at
 N other paths; the one shown is canonical.
 
+Every result ends with a **date in brackets**: the document's last git commit date (or its mtime,
+marked `uncommitted`, when git has not seen the current content). Read it. When two hits disagree,
+the newer one is usually the correction and the older one the thing it corrected — and an older doc
+never justifies removing something that is working. A `STALE` marker means the file changed after
+it was indexed, so the excerpt and line range may be wrong: run `index` and search again.
+
 A top-level `archive/` is **excluded by default** — it holds superseded material (§4). Pass
 `--include-archive` only when deliberately digging through dead history.
 

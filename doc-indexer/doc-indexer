@@ -35,6 +35,7 @@ import hashlib
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -508,6 +509,37 @@ def cmd_index(args):
 # --------------------------------------------------------------------------
 # search (semantic, requires embeddings)
 # --------------------------------------------------------------------------
+def doc_date(path):
+    """When a document last changed, as 'YYYY-MM-DD' plus a marker when git can't vouch for it.
+
+    The git commit date, not mtime: a checkout or submodule update resets mtime, so
+    it says when the file landed on this disk, not when its content was written.
+    Results carry this because a hit that reads as authoritative may be older than
+    the document that corrected it, and the excerpt alone does not show that.
+    """
+    try:
+        mtime = datetime.date.fromtimestamp(os.stat(path).st_mtime).isoformat()
+    except OSError:
+        return "missing on disk"
+    d = os.path.dirname(path)
+
+    def git(*a):
+        try:
+            r = subprocess.run(
+                ["git", "-C", d, *a, "--", path], capture_output=True, text=True, timeout=5
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return r.stdout.strip() if r.returncode == 0 else None
+
+    committed = git("log", "-1", "--format=%cs")
+    if not committed:
+        return f"{mtime} uncommitted"
+    if git("status", "--porcelain"):
+        return f"{mtime} uncommitted edits, last commit {committed}"
+    return committed
+
+
 def cmd_search(args):
     db_path = resolve_db_path(args.db)
     if not os.path.isfile(db_path):
@@ -608,7 +640,17 @@ def cmd_search(args):
         status = status_by_hash.get(content_hash)
         status_tag = f"[{status}] " if status else ""
         excerpt = " ".join(text.split())[:220]
-        print(f"{score:.3f}  {status_tag}{canonical}:{sl}-{el}{dup_note}")
+        stale = ""
+        row = conn.execute(
+            "SELECT size, mtime FROM documents WHERE path = ?", (canonical,)
+        ).fetchone()
+        try:
+            st = os.stat(canonical)
+            if row and (row[0] != st.st_size or abs(row[1] - st.st_mtime) > 1e-6):
+                stale = "  STALE: file changed since indexed, excerpt and lines may be wrong; re-run index"
+        except OSError:
+            stale = "  STALE: file no longer exists; re-run index"
+        print(f"{score:.3f}  {status_tag}{canonical}:{sl}-{el}  [{doc_date(canonical)}]{dup_note}{stale}")
         print(f"       {excerpt}")
 
 
@@ -645,7 +687,7 @@ def cmd_find(args):
             if needle in hay:
                 hits.append((i, line.strip()))
         if hits:
-            print(path)
+            print(f"{path}  [{doc_date(path)}]")
             for i, line in hits[: args.max_per_file]:
                 print(f"  {i}: {line[:200]}")
             if len(hits) > args.max_per_file:
